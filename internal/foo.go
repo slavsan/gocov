@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"bufio"
@@ -37,7 +37,7 @@ type covFile struct {
 
 var files = map[string]*covFile{}
 
-func main() {
+func Exec() {
 	var (
 		f           *os.File
 		err         error
