@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -23,6 +24,10 @@ type Config struct {
 	Color bool
 }
 
+type GocovConfig struct {
+	Ignore []string `json:"ignore"`
+}
+
 type covReportLine struct {
 	StartLine       int
 	StartColumn     int
@@ -41,6 +46,23 @@ type covFile struct {
 	Lines         []*covReportLine
 }
 
+func loadConfig(fsys fs.FS) *GocovConfig {
+	f, err := fsys.Open(".gocov")
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+
+	b, err := io.ReadAll(f)
+	check(err)
+
+	var conf *GocovConfig
+	err = json.Unmarshal(b, &conf)
+	check(err)
+
+	return conf
+}
+
 func Exec(w io.Writer, fsys fs.FS, config *Config) {
 	var (
 		f           fs.File
@@ -51,6 +73,7 @@ func Exec(w io.Writer, fsys fs.FS, config *Config) {
 		covered     int64
 		moduleDir   = filepath.Dir(getModule(fsys))
 		files       = map[string]*covFile{}
+		gocovConfig = loadConfig(fsys)
 	)
 
 	f, err = fsys.Open("coverage.out")
@@ -92,7 +115,7 @@ func Exec(w io.Writer, fsys fs.FS, config *Config) {
 		f.Path = strings.TrimPrefix(f.Name, moduleDir+"/")
 	}
 
-	report(w, config, files)
+	report(w, config, gocovConfig, files)
 }
 
 type Tree struct {
@@ -229,9 +252,24 @@ func (n *Node) Add(path string, value *covFile) {
 	n.children[path[:index]].Add(path[index+1:], value)
 }
 
-func report(w io.Writer, config *Config, f map[string]*covFile) {
+func isIgnored(f *covFile, config *GocovConfig) bool {
+	if config == nil {
+		return false
+	}
+	for _, ignore := range config.Ignore {
+		if strings.HasPrefix(f.Path, ignore) {
+			return true
+		}
+	}
+	return false
+}
+
+func report(w io.Writer, config *Config, gocovConfig *GocovConfig, f map[string]*covFile) {
 	tree := NewTree(w)
 	for _, v := range f {
+		if isIgnored(v, gocovConfig) {
+			continue
+		}
 		tree.Add(v.Path, v)
 	}
 	fileMaxLen, stmtsMaxLen := tree.Accumulate()

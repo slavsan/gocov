@@ -308,13 +308,15 @@ github.com/slavsan/gospec/gospec.go:224.43,230.2 1 225
 github.com/slavsan/gospec/gospec.go:232.49,239.2 1 426
 `
 
-func TestExampleOutput1(t *testing.T) {
+func TestStdoutReport(t *testing.T) {
 	testCases := []struct {
+		title    string
 		fsys     fs.FS
 		config   *internal.Config
 		expected string
 	}{
 		{
+			title: "with example coverage.out file and stdout report and colors disabled",
 			fsys: fstest.MapFS{
 				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
 				"coverage.out": {Data: []byte(exampleCoverageOut)},
@@ -337,6 +339,7 @@ func TestExampleOutput1(t *testing.T) {
 			}, "\n"),
 		},
 		{
+			title: "with example coverage.out file and stdout report and colors enabled",
 			fsys: fstest.MapFS{
 				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
 				"coverage.out": {Data: []byte(exampleCoverageOut)},
@@ -359,6 +362,7 @@ func TestExampleOutput1(t *testing.T) {
 			}, "\n"),
 		},
 		{
+			title: "with another example coverage.out file and stdout report",
 			fsys: fstest.MapFS{
 				"go.mod":       {Data: []byte(`module github.com/slavsan/gocov`)},
 				"coverage.out": {Data: []byte(exampleCoverageOut2)},
@@ -380,11 +384,40 @@ func TestExampleOutput1(t *testing.T) {
 				``,
 			}, "\n"),
 		},
+		{
+			title: "with .gocov file specifying one file to ignore",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gocov`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut2)},
+				".gocov": {Data: []byte(strings.Join([]string{
+					`{`,
+					`	"ignore": [`,
+					`		"gocov/main.go"`,
+					`	]`,
+					`}`,
+				}, "\n"))},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expected: strings.Join([]string{
+				`|----------------|---------|----------|`,
+				`| File           |   Stmts |  % Stmts |`,
+				`|----------------|---------|----------|`,
+				`| gocov          | 133/141 |   94.33% |`,
+				`|   cmd          |     0/3 |    0.00% |`,
+				`|     gocov.go   |     0/3 |    0.00% |`,
+				`|   internal     | 133/138 |   96.38% |`,
+				`|     gocov.go   | 133/138 |   96.38% |`,
+				`|----------------|---------|----------|`,
+				``,
+			}, "\n"),
+		},
 	}
 
 	for _, tc := range testCases {
 		tc := tc
-		t.Run("", func(t *testing.T) {
+		t.Run(tc.title, func(t *testing.T) {
 			var buffer bytes.Buffer
 			internal.Exec(&buffer, tc.fsys, tc.config)
 			if tc.expected != buffer.String() {
