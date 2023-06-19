@@ -1,7 +1,13 @@
 package cmd
 
-import "github.com/slavsan/gocov/internal"
+import (
+	"os"
+
+	"github.com/slavsan/gocov/internal"
+)
 
 func Exec() {
-	internal.Exec()
+	config := &internal.Config{}
+	config.Color = true
+	internal.Exec(os.Stdout, os.DirFS("."), config)
 }

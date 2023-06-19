@@ -3,9 +3,11 @@ package internal
 import (
 	"bufio"
 	"fmt"
+	"io"
+	"io/fs"
 	"log"
-	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -16,6 +18,10 @@ const (
 	green   = "\033[0;32m"
 	yellow  = "\033[0;33m"
 )
+
+type Config struct {
+	Color bool
+}
 
 type covReportLine struct {
 	StartLine       int
@@ -35,20 +41,19 @@ type covFile struct {
 	Lines         []*covReportLine
 }
 
-var files = map[string]*covFile{}
-
-func Exec() {
+func Exec(w io.Writer, fsys fs.FS, config *Config) {
 	var (
-		f           *os.File
+		f           fs.File
 		err         error
 		colonIndex  int
 		currentLine int
 		all         int64
 		covered     int64
-		moduleDir   = filepath.Dir(getModule())
+		moduleDir   = filepath.Dir(getModule(fsys))
+		files       = map[string]*covFile{}
 	)
 
-	f, err = os.Open("./coverage.out")
+	f, err = fsys.Open("coverage.out")
 	check(err)
 	defer func() { _ = f.Close() }()
 
@@ -87,55 +92,108 @@ func Exec() {
 		f.Path = strings.TrimPrefix(f.Name, moduleDir+"/")
 	}
 
-	report(files)
+	report(w, config, files)
 }
 
 type Tree struct {
-	Root *Node
+	Root   *Node
+	writer io.Writer
 }
 
-func NewTree() *Tree {
+func NewTree(w io.Writer) *Tree {
 	return &Tree{
-		Root: &Node{path: "root", children: map[string]*Node{}},
+		writer: w,
+		Root:   &Node{path: "root", children: map[string]*Node{}},
 	}
 }
 
-func (t *Tree) Render() {
-	for _, c := range t.Root.children {
-		c.Render(0)
+func (t *Tree) Render(config *Config, fileMaxLen, stmtsMaxLen int) {
+	w := t.writer
+	fmt.Fprintf(w, "|-%s-|-%s-|-%s-|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8))
+	fmt.Fprintf(w, "| %-*s | %*s | %*s |\n", fileMaxLen, "File", stmtsMaxLen+1, "Stmts", 8, "% Stmts")
+	fmt.Fprintf(w, "|-%s-|-%s-|-%s-|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8))
+
+	sortOrder := make([]string, 0, len(t.Root.children))
+	for k := range t.Root.children {
+		sortOrder = append(sortOrder, k)
 	}
+	sort.Strings(sortOrder)
+
+	for _, k := range sortOrder {
+		c := t.Root.children[k]
+		c.Render(w, config, 0, fileMaxLen, stmtsMaxLen)
+	}
+	fmt.Fprintf(w, "|-%s-|-%s-|-%s-|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8))
 }
 
-func (t *Tree) Accumulate() {
-	_, _ = t.Root.Accumulate()
+func (t *Tree) Accumulate() (int, int) {
+	var fileMaxLen int
+	var stmtsMaxLen int
+	_, _, fileMaxLen, stmtsMaxLen = t.Root.Accumulate(0)
+	return fileMaxLen, stmtsMaxLen
 }
 
-func (n *Node) Accumulate() (int, int) {
-	var all, covered int
+func (n *Node) Accumulate(indent int) (int, int, int, int) {
+	var all, covered, maxPathLength, maxStmtsLength int
 	if n.value != nil {
 		all = n.value.AllStatements
 		covered = n.value.Covered
 	}
 	for _, cn := range n.children {
-		a, c := cn.Accumulate()
+		a, c, fileMaxLen, stmtsMaxLen := cn.Accumulate(indent + 1)
 		all, covered = all+a, covered+c
+		if fileMaxLen > maxPathLength {
+			maxPathLength = fileMaxLen
+		}
+		if stmtsMaxLen > maxStmtsLength {
+			maxStmtsLength = stmtsMaxLen
+		}
 	}
 	n.allStatements = all
 	n.covered = covered
-	return all, covered
+	pathLength := (indent * 2) + len(n.path)
+	if pathLength > maxPathLength {
+		maxPathLength = pathLength
+	}
+	nodeStmtsLength := digitsCount(all) + digitsCount(covered)
+	if nodeStmtsLength > maxStmtsLength {
+		maxStmtsLength = nodeStmtsLength
+	}
+	return all, covered, maxPathLength, maxStmtsLength
 }
 
-func (n *Node) Render(indent int) {
+func padPath(w io.Writer, maxFileLen int, path string, indent int) string {
+	return strings.Repeat(" ", maxFileLen-len(path)-(indent*2))
+}
+
+func (n *Node) Render(w io.Writer, config *Config, indent int, fileMaxLen int, stmtsMaxLen int) {
 	percent := getPercent(n)
 	color := red
+	noColorValue := noColor
 	if percent >= 80 {
 		color = green
 	} else if percent >= 50 {
 		color = yellow
 	}
-	fmt.Printf("|%s%s %-30s | %10d/%10d | %8.2f%%%s |\n", color, strings.Repeat("  ", indent), n.path, n.covered, n.allStatements, percent, noColor)
-	for _, c := range n.children {
-		c.Render(indent + 1)
+	if !config.Color {
+		color = ""
+		noColorValue = ""
+	}
+	stmtsPadding := stmtsMaxLen - digitsCount(n.allStatements) - digitsCount(n.covered)
+	fmt.Fprintf(w,
+		"|%s%s %s%s %s| %s%s%d/%d%s | %s%7.2f%%%s |\n",
+		color, strings.Repeat("  ", indent), n.path, padPath(w, fileMaxLen, n.path, indent), noColorValue,
+		color, strings.Repeat(" ", stmtsPadding), n.covered, n.allStatements, noColorValue,
+		color, percent, noColorValue,
+	)
+	sortOrder := make([]string, 0, len(n.children))
+	for k := range n.children {
+		sortOrder = append(sortOrder, k)
+	}
+	sort.Strings(sortOrder)
+	for _, k := range sortOrder {
+		c := n.children[k]
+		c.Render(w, config, indent+1, fileMaxLen, stmtsMaxLen)
 	}
 }
 
@@ -171,17 +229,17 @@ func (n *Node) Add(path string, value *covFile) {
 	n.children[path[:index]].Add(path[index+1:], value)
 }
 
-func report(f map[string]*covFile) {
-	tree := NewTree()
+func report(w io.Writer, config *Config, f map[string]*covFile) {
+	tree := NewTree(w)
 	for _, v := range f {
 		tree.Add(v.Path, v)
 	}
-	tree.Accumulate()
-	tree.Render()
+	fileMaxLen, stmtsMaxLen := tree.Accumulate()
+	tree.Render(config, fileMaxLen, stmtsMaxLen)
 }
 
-func getModule() string {
-	f, err := os.Open("go.mod")
+func getModule(fsys fs.FS) string {
+	f, err := fsys.Open("go.mod")
 	check(err)
 	defer func() { _ = f.Close() }()
 	scanner := bufio.NewScanner(f)
@@ -233,4 +291,16 @@ func check(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func digitsCount(num int) int {
+	if num == 0 {
+		return 1
+	}
+	var digits int
+	for num != 0 {
+		num /= 10
+		digits++
+	}
+	return digits
 }
