@@ -7,10 +7,18 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+)
+
+type Command int
+
+const (
+	Report Command = iota
+	Check
 )
 
 const (
@@ -25,7 +33,8 @@ type Config struct {
 }
 
 type GocovConfig struct {
-	Ignore []string `json:"ignore"`
+	Ignore    []string `json:"ignore"`
+	Threshold float64  `json:"threshold"`
 }
 
 type covReportLine struct {
@@ -46,6 +55,17 @@ type covFile struct {
 	Lines         []*covReportLine
 }
 
+type Exiter interface {
+	Exit(code int)
+}
+
+type ProcessExiter struct {
+}
+
+func (p *ProcessExiter) Exit(code int) {
+	os.Exit(code)
+}
+
 func loadConfig(fsys fs.FS) *GocovConfig {
 	f, err := fsys.Open(".gocov")
 	if err != nil {
@@ -63,7 +83,7 @@ func loadConfig(fsys fs.FS) *GocovConfig {
 	return conf
 }
 
-func Exec(w io.Writer, fsys fs.FS, config *Config) {
+func Exec(command Command, stdout io.Writer, stderr io.Writer, fsys fs.FS, config *Config, exiter Exiter) {
 	var (
 		f           fs.File
 		err         error
@@ -115,7 +135,32 @@ func Exec(w io.Writer, fsys fs.FS, config *Config) {
 		f.Path = strings.TrimPrefix(f.Name, moduleDir+"/")
 	}
 
-	report(w, config, gocovConfig, files)
+	tree := NewTree(stdout)
+	for _, v := range files {
+		if isIgnored(v, gocovConfig) {
+			continue
+		}
+		tree.Add(v.Path, v)
+	}
+	fileMaxLen, stmtsMaxLen := tree.Accumulate()
+
+	if command == Report {
+		printReport(tree, config, fileMaxLen, stmtsMaxLen)
+		return
+	}
+
+	if command == Check {
+		actualCoveragePercent := float64(tree.Root.covered) * 100 / float64(tree.Root.allStatements)
+		if gocovConfig == nil {
+			_, _ = fmt.Fprintf(stderr, "Coverage check failed: .gocov file with threshold needs to be set\n")
+			exiter.Exit(1)
+		}
+		if actualCoveragePercent < gocovConfig.Threshold {
+			_, _ = fmt.Fprintf(stderr, "Coverage check failed: expected to have %.2f coverage, but got %.2f\n", gocovConfig.Threshold, actualCoveragePercent)
+			exiter.Exit(1)
+		}
+		return
+	}
 }
 
 type Tree struct {
@@ -264,15 +309,7 @@ func isIgnored(f *covFile, config *GocovConfig) bool {
 	return false
 }
 
-func report(w io.Writer, config *Config, gocovConfig *GocovConfig, f map[string]*covFile) {
-	tree := NewTree(w)
-	for _, v := range f {
-		if isIgnored(v, gocovConfig) {
-			continue
-		}
-		tree.Add(v.Path, v)
-	}
-	fileMaxLen, stmtsMaxLen := tree.Accumulate()
+func printReport(tree *Tree, config *Config, fileMaxLen, stmtsMaxLen int) {
 	tree.Render(config, fileMaxLen, stmtsMaxLen)
 }
 

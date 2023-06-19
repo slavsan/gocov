@@ -9,5 +9,22 @@ import (
 func Exec() {
 	config := &internal.Config{}
 	config.Color = true
-	internal.Exec(os.Stdout, os.DirFS("."), config)
+
+	command := internal.Report
+
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "check":
+			command = internal.Check
+		}
+	}
+
+	internal.Exec(
+		command,
+		os.Stdout,
+		os.Stderr,
+		os.DirFS("."),
+		config,
+		&internal.ProcessExiter{},
+	)
 }
