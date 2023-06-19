@@ -2,6 +2,7 @@ package internal_test
 
 import (
 	"bytes"
+	"io/fs"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -308,57 +309,87 @@ github.com/slavsan/gospec/gospec.go:232.49,239.2 1 426
 `
 
 func TestExampleOutput1(t *testing.T) {
-	fsys := fstest.MapFS{
-		"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
-		"coverage.out": {Data: []byte(exampleCoverageOut)},
+	testCases := []struct {
+		fsys     fs.FS
+		config   *internal.Config
+		expected string
+	}{
+		{
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut)},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expected: strings.Join([]string{
+				`|--------------------|---------|----------|`,
+				`| File               |   Stmts |  % Stmts |`,
+				`|--------------------|---------|----------|`,
+				`| gospec             | 237/323 |   73.37% |`,
+				`|   cmd              |    0/28 |    0.00% |`,
+				`|     cover.go       |    0/28 |    0.00% |`,
+				`|   expect.go        |   43/86 |   50.00% |`,
+				`|   featurespec.go   |  92/107 |   85.98% |`,
+				`|   gospec.go        | 102/102 |  100.00% |`,
+				`|--------------------|---------|----------|`,
+				``,
+			}, "\n"),
+		},
+		{
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut)},
+			},
+			config: &internal.Config{
+				Color: true,
+			},
+			expected: strings.Join([]string{
+				"|--------------------|---------|----------|",
+				"| File               |   Stmts |  % Stmts |",
+				"|--------------------|---------|----------|",
+				"|\033[0;33m gospec             \033[0m| \033[0;33m237/323\033[0m | \033[0;33m  73.37%\033[0m |",
+				"|\033[0;31m   cmd              \033[0m| \033[0;31m   0/28\033[0m | \033[0;31m   0.00%\033[0m |",
+				"|\033[0;31m     cover.go       \033[0m| \033[0;31m   0/28\033[0m | \033[0;31m   0.00%\033[0m |",
+				"|\033[0;33m   expect.go        \033[0m| \033[0;33m  43/86\033[0m | \033[0;33m  50.00%\033[0m |",
+				"|\033[0;32m   featurespec.go   \033[0m| \033[0;32m 92/107\033[0m | \033[0;32m  85.98%\033[0m |",
+				"|\033[0;32m   gospec.go        \033[0m| \033[0;32m102/102\033[0m | \033[0;32m 100.00%\033[0m |",
+				"|--------------------|---------|----------|",
+				"",
+			}, "\n"),
+		},
+		{
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gocov`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut2)},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expected: strings.Join([]string{
+				`|----------------|---------|----------|`,
+				`| File           |   Stmts |  % Stmts |`,
+				`|----------------|---------|----------|`,
+				`| gocov          | 133/142 |   93.66% |`,
+				`|   cmd          |     0/3 |    0.00% |`,
+				`|     gocov.go   |     0/3 |    0.00% |`,
+				`|   internal     | 133/138 |   96.38% |`,
+				`|     gocov.go   | 133/138 |   96.38% |`,
+				`|   main.go      |     0/1 |    0.00% |`,
+				`|----------------|---------|----------|`,
+				``,
+			}, "\n"),
+		},
 	}
-	var buffer bytes.Buffer
-	config := &internal.Config{
-		Color: false,
-	}
-	internal.Exec(&buffer, fsys, config)
-	expected := strings.Join([]string{
-		`|--------------------|---------|----------|`,
-		`| File               |   Stmts |  % Stmts |`,
-		`|--------------------|---------|----------|`,
-		`| gospec             | 237/323 |   73.37% |`,
-		`|   cmd              |    0/28 |    0.00% |`,
-		`|     cover.go       |    0/28 |    0.00% |`,
-		`|   expect.go        |   43/86 |   50.00% |`,
-		`|   featurespec.go   |  92/107 |   85.98% |`,
-		`|   gospec.go        | 102/102 |  100.00% |`,
-		`|--------------------|---------|----------|`,
-		``,
-	}, "\n")
-	if expected != buffer.String() {
-		t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", expected, buffer.String())
-	}
-}
 
-func TestExampleOutput2(t *testing.T) {
-	fsys := fstest.MapFS{
-		"go.mod":       {Data: []byte(`module github.com/slavsan/gocov`)},
-		"coverage.out": {Data: []byte(exampleCoverageOut2)},
-	}
-	var buffer bytes.Buffer
-	config := &internal.Config{
-		Color: false,
-	}
-	internal.Exec(&buffer, fsys, config)
-	expected := strings.Join([]string{
-		`|----------------|---------|----------|`,
-		`| File           |   Stmts |  % Stmts |`,
-		`|----------------|---------|----------|`,
-		`| gocov          | 133/142 |   93.66% |`,
-		`|   cmd          |     0/3 |    0.00% |`,
-		`|     gocov.go   |     0/3 |    0.00% |`,
-		`|   internal     | 133/138 |   96.38% |`,
-		`|     gocov.go   | 133/138 |   96.38% |`,
-		`|   main.go      |     0/1 |    0.00% |`,
-		`|----------------|---------|----------|`,
-		``,
-	}, "\n")
-	if expected != buffer.String() {
-		t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", expected, buffer.String())
+	for _, tc := range testCases {
+		tc := tc
+		t.Run("", func(t *testing.T) {
+			var buffer bytes.Buffer
+			internal.Exec(&buffer, tc.fsys, tc.config)
+			if tc.expected != buffer.String() {
+				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expected, buffer.String())
+			}
+		})
 	}
 }
