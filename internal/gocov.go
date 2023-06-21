@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -20,6 +21,7 @@ const (
 	Report Command = iota
 	Check
 	Inspect
+	Test
 )
 
 const (
@@ -85,6 +87,17 @@ func loadConfig(fsys fs.FS) *GocovConfig {
 }
 
 func Exec(command Command, args []string, stdout io.Writer, stderr io.Writer, fsys fs.FS, config *Config, exiter Exiter) {
+	if command == Test {
+		coverArgs := []string{"go", "test", "-coverprofile", "coverage.out", "-coverpkg", "./...", "./..."}
+		fmt.Printf("executing: %s\n", strings.Join(coverArgs, " "))
+		cmd := exec.Command(coverArgs[0], coverArgs[1:]...)
+		cmd.Stdout = stdout
+		cmd.Stderr = stderr
+		err := cmd.Run()
+		check(err)
+		return
+	}
+
 	var (
 		f           fs.File
 		err         error

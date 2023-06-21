@@ -15,6 +15,8 @@ func Exec() {
 
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "test":
+			command = internal.Test
 		case "check":
 			command = internal.Check
 		case "inspect":
@@ -22,7 +24,6 @@ func Exec() {
 			if len(os.Args) > 2 {
 				args = append(args, os.Args[2])
 			}
-			//os.Args[1]
 		}
 	}
 
