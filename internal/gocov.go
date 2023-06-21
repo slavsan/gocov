@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,6 +23,7 @@ const (
 	Check
 	Inspect
 	Test
+	ConfigFile
 )
 
 const (
@@ -38,6 +40,7 @@ type Config struct {
 type GocovConfig struct {
 	Ignore    []string `json:"ignore"`
 	Threshold float64  `json:"threshold"`
+	Contents  []byte
 }
 
 type covReportLine struct {
@@ -69,19 +72,29 @@ func (p *ProcessExiter) Exit(code int) {
 	os.Exit(code)
 }
 
-func loadConfig(fsys fs.FS) *GocovConfig {
+func loadConfig(fsys fs.FS, stderr io.Writer, exiter Exiter) *GocovConfig {
 	f, err := fsys.Open(".gocov")
 	if err != nil {
 		return nil
 	}
 	defer func() { _ = f.Close() }()
 
-	b, err := io.ReadAll(f)
+	var buf bytes.Buffer
+	tee := io.TeeReader(f, &buf)
+
+	b, err := io.ReadAll(tee)
 	check(err)
 
 	var conf *GocovConfig
 	err = json.Unmarshal(b, &conf)
-	check(err)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to parse .gocov config file: %s\n", err)
+		exiter.Exit(1)
+	}
+
+	if conf != nil {
+		conf.Contents = buf.Bytes()
+	}
 
 	return conf
 }
@@ -107,8 +120,24 @@ func Exec(command Command, args []string, stdout io.Writer, stderr io.Writer, fs
 		covered     int64
 		moduleDir   = filepath.Dir(getModule(fsys))
 		files       = map[string]*covFile{}
-		gocovConfig = loadConfig(fsys)
+		gocovConfig = loadConfig(fsys, stderr, exiter)
 	)
+
+	if command == ConfigFile {
+		if gocovConfig != nil {
+			fmt.Fprintf(stdout, "%s\n", gocovConfig.Contents)
+			return
+		}
+		fmt.Fprintf(stdout, strings.Join([]string{
+			`{`,
+			`  "threshold": 50,`,
+			`  "ignore": [`,
+			`  ]`,
+			`}`,
+			``,
+		}, "\n"))
+		return
+	}
 
 	f, err = fsys.Open("coverage.out")
 	check(err)
