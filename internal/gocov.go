@@ -19,13 +19,14 @@ type Command int
 const (
 	Report Command = iota
 	Check
+	Inspect
 )
 
 const (
-	noColor = "\033[0m"
-	red     = "\033[0;31m"
-	green   = "\033[0;32m"
-	yellow  = "\033[0;33m"
+	NoColor = "\033[0m"
+	Red     = "\033[0;31m"
+	Green   = "\033[0;32m"
+	Yellow  = "\033[0;33m"
 )
 
 type Config struct {
@@ -83,7 +84,7 @@ func loadConfig(fsys fs.FS) *GocovConfig {
 	return conf
 }
 
-func Exec(command Command, stdout io.Writer, stderr io.Writer, fsys fs.FS, config *Config, exiter Exiter) {
+func Exec(command Command, args []string, stdout io.Writer, stderr io.Writer, fsys fs.FS, config *Config, exiter Exiter) {
 	var (
 		f           fs.File
 		err         error
@@ -143,6 +144,57 @@ func Exec(command Command, stdout io.Writer, stderr io.Writer, fsys fs.FS, confi
 		tree.Add(v.Path, v)
 	}
 	fileMaxLen, stmtsMaxLen := tree.Accumulate()
+
+	if command == Inspect {
+		if len(args) < 1 {
+			fmt.Fprintf(stdout, "no arguments provided to inspect command\n")
+			return
+		}
+		relPath := args[0]
+		var targetFile string
+		index := strings.IndexByte(relPath, '/')
+		if index == -1 {
+			targetFile = relPath
+		} else {
+			targetFile = relPath[index+1:]
+		}
+		file, ok := files[moduleDir+"/"+relPath]
+		if !ok {
+			panic("file not found")
+		}
+		f2, err := fsys.Open(targetFile)
+		check(err)
+		defer func() { _ = f2.Close() }()
+
+		data, err := io.ReadAll(f2)
+		check(err)
+
+		lines := strings.Split(string(data), "\n")
+
+		sort.Slice(file.Lines, func(i, j int) bool {
+			if file.Lines[i].EndLine == file.Lines[j].EndLine {
+				return file.Lines[i].StartColumn > file.Lines[j].StartColumn
+			}
+			return file.Lines[i].EndLine > file.Lines[j].EndLine
+		})
+
+		for _, x := range file.Lines {
+			if x.Hits > 0 {
+				continue
+			}
+
+			lineNum := x.EndLine - 1
+			lines[lineNum] = lines[lineNum][:x.EndColumn-1] + NoColor + lines[lineNum][x.EndColumn-1:]
+
+			lineNum = x.StartLine - 1
+			lines[lineNum] = lines[lineNum][:x.StartColumn-1] + Red + lines[lineNum][x.StartColumn-1:]
+		}
+
+		for num, line := range lines {
+			_, _ = fmt.Fprintf(stdout, "%d| %s\n", num+1, line)
+		}
+		return
+	}
 
 	if command == Report {
 		printReport(tree, config, fileMaxLen, stmtsMaxLen)
@@ -236,12 +288,12 @@ func padPath(w io.Writer, maxFileLen int, path string, indent int) string {
 
 func (n *Node) Render(w io.Writer, config *Config, indent int, fileMaxLen int, stmtsMaxLen int) {
 	percent := getPercent(n)
-	color := red
-	noColorValue := noColor
+	color := Red
+	noColorValue := NoColor
 	if percent >= 80 {
-		color = green
+		color = Green
 	} else if percent >= 50 {
-		color = yellow
+		color = Yellow
 	}
 	if !config.Color {
 		color = ""

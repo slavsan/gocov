@@ -10,6 +10,15 @@ import (
 	"github.com/slavsan/gocov/internal"
 )
 
+const exampleCoverageOut3 = `mode: atomic
+github.com/slavsan/gocov/cmd/gocov.go:9.13,16.22 5 0
+github.com/slavsan/gocov/cmd/gocov.go:29.2,37.3 1 0
+github.com/slavsan/gocov/cmd/gocov.go:16.22,17.21 1 0
+github.com/slavsan/gocov/cmd/gocov.go:18.16,19.28 1 0
+github.com/slavsan/gocov/cmd/gocov.go:20.18,22.24 2 0
+github.com/slavsan/gocov/cmd/gocov.go:22.24,24.5 1 0
+`
+
 const exampleCoverageOut2 = `mode: atomic
 github.com/slavsan/gocov/main.go:5.13,7.2 1 0
 github.com/slavsan/gocov/internal/gocov.go:44.52,58.15 4 2
@@ -421,7 +430,7 @@ func TestStdoutReport(t *testing.T) {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 			exiter := &exiterMock{}
-			internal.Exec(internal.Report, &stdout, &stderr, tc.fsys, tc.config, exiter)
+			internal.Exec(internal.Report, []string{}, &stdout, &stderr, tc.fsys, tc.config, exiter)
 			if tc.expected != stdout.String() {
 				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expected, stdout.String())
 			}
@@ -482,7 +491,134 @@ func TestCheckCoverage(t *testing.T) {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 			exiter := &exiterMock{}
-			internal.Exec(internal.Check, &stdout, &stderr, tc.fsys, tc.config, exiter)
+			internal.Exec(internal.Check, []string{}, &stdout, &stderr, tc.fsys, tc.config, exiter)
+			if tc.expectedStdout != stdout.String() {
+				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStdout, stdout.String())
+			}
+			if tc.expectedStderr != stderr.String() {
+				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStderr, stderr.String())
+			}
+			if tc.expectedExitCode != exiter.code {
+				t.Errorf("exit code does not match\n\texpected:\n`%d`\n\tactual:\n`%d`\n", tc.expectedExitCode, exiter.code)
+			}
+		})
+	}
+}
+
+func TestInspect(t *testing.T) {
+	testCases := []struct {
+		title            string
+		fsys             fs.FS
+		config           *internal.Config
+		expectedStdout   string
+		expectedStderr   string
+		expectedExitCode int
+	}{
+		{
+			title: "when printing the entire file",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut3)},
+				"cmd/gocov.go": {Data: []byte(strings.Join([]string{
+					`package cmd`,
+					``,
+					`import (`,
+					`	"os"`,
+					``,
+					`	"github.com/slavsan/gocov/internal"`,
+					`)`,
+					``,
+					`func Exec() {`,
+					`	var args []string`,
+					`	config := &internal.Config{}`,
+					`	config.Color = true`,
+					``,
+					`	command := internal.Report`,
+					``,
+					`	if len(os.Args) > 1 {`,
+					`		switch os.Args[1] {`,
+					`		case "check":`,
+					`			command = internal.Check`,
+					`		case "inspect":`,
+					`			command = internal.Inspect`,
+					`			if len(os.Args) > 2 {`,
+					`				args = append(args, os.Args[2])`,
+					`			}`,
+					`			//os.Args[1]`,
+					`		}`,
+					`	}`,
+					``,
+					`	internal.Exec(`,
+					`		command,`,
+					`		args,`,
+					`		os.Stdout,`,
+					`		os.Stderr,`,
+					`		os.DirFS("."),`,
+					`		config,`,
+					`		&internal.ProcessExiter{},`,
+					`	)`,
+					`}`,
+					``,
+				}, "\n"))},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout: strings.Join([]string{
+				`1| package cmd`,
+				`2| `,
+				`3| import (`,
+				`4| 	"os"`,
+				`5| `,
+				`6| 	"github.com/slavsan/gocov/internal"`,
+				`7| )`,
+				`8| `,
+				`9| func Exec() ` + internal.Red + `{`,
+				`10| 	var args []string`,
+				`11| 	config := &internal.Config{}`,
+				`12| 	config.Color = true`,
+				`13| `,
+				`14| 	command := internal.Report`,
+				`15| `,
+				`16| 	if len(os.Args) > 1 ` + internal.NoColor + internal.Red + `{`,
+				`17| 		switch os.Args[1] ` + internal.NoColor + `{`,
+				`18| 		case "check":` + internal.Red,
+				`19| 			command = internal.Check` + internal.NoColor,
+				`20| 		case "inspect":` + internal.Red,
+				`21| 			command = internal.Inspect`,
+				`22| 			if len(os.Args) > 2 ` + internal.NoColor + internal.Red + `{`,
+				`23| 				args = append(args, os.Args[2])`,
+				`24| 			}` + internal.NoColor,
+				`25| 			//os.Args[1]`,
+				`26| 		}`,
+				`27| 	}`,
+				`28| `,
+				`29| 	` + internal.Red + `internal.Exec(`,
+				`30| 		command,`,
+				`31| 		args,`,
+				`32| 		os.Stdout,`,
+				`33| 		os.Stderr,`,
+				`34| 		os.DirFS("."),`,
+				`35| 		config,`,
+				`36| 		&internal.ProcessExiter{},`,
+				`37| 	)` + internal.NoColor,
+				`38| }`,
+				`39| `,
+				``,
+			}, "\n"),
+			expectedStderr:   "",
+			expectedExitCode: 0,
+		},
+		// TODO: when printing excerpts
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.title, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			exiter := &exiterMock{}
+			internal.Exec(internal.Inspect, []string{"gocov/cmd/gocov.go"}, &stdout, &stderr, tc.fsys, tc.config, exiter)
 			if tc.expectedStdout != stdout.String() {
 				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStdout, stdout.String())
 			}
