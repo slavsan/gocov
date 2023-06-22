@@ -31,13 +31,7 @@ func Exec() {
 		}
 	}
 
-	internal.NewCommand().Exec(
-		command,
-		args,
-		os.Stdout,
-		os.Stderr,
-		os.DirFS("."),
-		config,
-		&internal.ProcessExiter{},
-	)
+	internal.
+		NewCommand(os.Stdout, os.Stderr, os.DirFS("."), config, &internal.ProcessExiter{}).
+		Exec(command, args)
 }
