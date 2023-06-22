@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -65,8 +64,7 @@ type Exiter interface {
 	Exit(code int)
 }
 
-type ProcessExiter struct {
-}
+type ProcessExiter struct{}
 
 func (p *ProcessExiter) Exit(code int) {
 	os.Exit(code)
@@ -83,12 +81,15 @@ func loadConfig(fsys fs.FS, stderr io.Writer, exiter Exiter) *GocovConfig {
 	tee := io.TeeReader(f, &buf)
 
 	b, err := io.ReadAll(tee)
-	check(err)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "internal error: failed to load .gocov config in memory: %s", err.Error())
+		exiter.Exit(1)
+	}
 
 	var conf *GocovConfig
 	err = json.Unmarshal(b, &conf)
 	if err != nil {
-		fmt.Fprintf(stderr, "failed to parse .gocov config file: %s\n", err)
+		_, _ = fmt.Fprintf(stderr, "failed to parse .gocov config file: %s\n", err)
 		exiter.Exit(1)
 	}
 
@@ -99,50 +100,52 @@ func loadConfig(fsys fs.FS, stderr io.Writer, exiter Exiter) *GocovConfig {
 	return conf
 }
 
-func Exec(command Command, args []string, stdout io.Writer, stderr io.Writer, fsys fs.FS, config *Config, exiter Exiter) {
-	if command == Test {
-		coverArgs := []string{"go", "test", "-coverprofile", "coverage.out", "-coverpkg", "./...", "./..."}
-		fmt.Printf("executing: %s\n", strings.Join(coverArgs, " "))
-		cmd := exec.Command(coverArgs[0], coverArgs[1:]...)
-		cmd.Stdout = stdout
-		cmd.Stderr = stderr
-		err := cmd.Run()
-		check(err)
+func testCommand(stdout, stderr io.Writer, exiter Exiter) {
+	coverArgs := []string{"test", "-coverprofile", "coverage.out", "-coverpkg", "./...", "./..."}
+	_, _ = fmt.Fprintf(stdout, "executing: go %s\n", strings.Join(coverArgs, " "))
+	cmd := exec.Command("go", coverArgs...)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	err := cmd.Run()
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "failed to run `go test` command: %s", err.Error())
+		exiter.Exit(1)
+	}
+}
+
+func config2(gocovConfig *GocovConfig, stdout io.Writer) {
+	if gocovConfig != nil {
+		_, _ = fmt.Fprintf(stdout, "%s\n", gocovConfig.Contents)
 		return
 	}
+	_, _ = fmt.Fprintf(stdout, strings.Join([]string{ //nolint:staticcheck // SA1006
+		`{`,
+		`  "threshold": 50,`,
+		`  "ignore": [`,
+		`  ]`,
+		`}`,
+		``,
+	}, "\n"))
+}
 
+type Cmd struct {
+	// ..
+}
+
+func NewCommand() *Cmd {
+	return &Cmd{
+		// ..
+	}
+}
+
+func parseCoverageFile(f io.Reader, stdout, stderr io.Writer, exiter Exiter, gocovConfig *GocovConfig, moduleDir string) (*Tree, map[string]*covFile) {
 	var (
-		f           fs.File
-		err         error
 		colonIndex  int
 		currentLine int
 		all         int64
 		covered     int64
-		moduleDir   = filepath.Dir(getModule(fsys))
 		files       = map[string]*covFile{}
-		gocovConfig = loadConfig(fsys, stderr, exiter)
 	)
-
-	if command == ConfigFile {
-		if gocovConfig != nil {
-			fmt.Fprintf(stdout, "%s\n", gocovConfig.Contents)
-			return
-		}
-		fmt.Fprintf(stdout, strings.Join([]string{
-			`{`,
-			`  "threshold": 50,`,
-			`  "ignore": [`,
-			`  ]`,
-			`}`,
-			``,
-		}, "\n"))
-		return
-	}
-
-	f, err = fsys.Open("coverage.out")
-	check(err)
-	defer func() { _ = f.Close() }()
-
 	scanner := bufio.NewScanner(f)
 	scanner.Scan() // skip the `mode` line
 	currentLine++
@@ -161,7 +164,8 @@ func Exec(command Command, args []string, stdout io.Writer, stderr io.Writer, fs
 
 		covLine, err := parseLine(line[colonIndex+1:])
 		if err != nil {
-			log.Fatalf("failed to parse coverage file on line %d\n", currentLine)
+			_, _ = fmt.Fprintf(stderr, "failed to parse coverage file on line %d\n", currentLine)
+			exiter.Exit(1)
 		}
 		files[name].Lines = append(files[name].Lines, covLine)
 
@@ -185,56 +189,40 @@ func Exec(command Command, args []string, stdout io.Writer, stderr io.Writer, fs
 		}
 		tree.Add(v.Path, v)
 	}
+
+	return tree, files
+}
+
+func (cmd *Cmd) Exec(command Command, args []string, stdout io.Writer, stderr io.Writer, fsys fs.FS, config *Config, exiter Exiter) {
+	if command == Test {
+		testCommand(stdout, stderr, exiter)
+		return
+	}
+
+	var (
+		f           fs.File
+		err         error
+		moduleDir   = filepath.Dir(getModule(fsys, stderr, exiter))
+		gocovConfig = loadConfig(fsys, stderr, exiter)
+	)
+
+	if command == ConfigFile {
+		config2(gocovConfig, stdout)
+		return
+	}
+
+	f, err = fsys.Open("coverage.out")
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "failed to open coverage.out: %s", err.Error())
+		exiter.Exit(1)
+	}
+	defer func() { _ = f.Close() }()
+
+	tree, files := parseCoverageFile(f, stdout, stderr, exiter, gocovConfig, moduleDir)
 	fileMaxLen, stmtsMaxLen := tree.Accumulate()
 
 	if command == Inspect {
-		if len(args) < 1 {
-			fmt.Fprintf(stdout, "no arguments provided to inspect command\n")
-			return
-		}
-		relPath := args[0]
-		var targetFile string
-		index := strings.IndexByte(relPath, '/')
-		if index == -1 {
-			targetFile = relPath
-		} else {
-			targetFile = relPath[index+1:]
-		}
-		file, ok := files[moduleDir+"/"+relPath]
-		if !ok {
-			panic("file not found")
-		}
-		f2, err := fsys.Open(targetFile)
-		check(err)
-		defer func() { _ = f2.Close() }()
-
-		data, err := io.ReadAll(f2)
-		check(err)
-
-		lines := strings.Split(string(data), "\n")
-
-		sort.Slice(file.Lines, func(i, j int) bool {
-			if file.Lines[i].EndLine == file.Lines[j].EndLine {
-				return file.Lines[i].StartColumn > file.Lines[j].StartColumn
-			}
-			return file.Lines[i].EndLine > file.Lines[j].EndLine
-		})
-
-		for _, x := range file.Lines {
-			if x.Hits > 0 {
-				continue
-			}
-
-			lineNum := x.EndLine - 1
-			lines[lineNum] = lines[lineNum][:x.EndColumn-1] + NoColor + lines[lineNum][x.EndColumn-1:]
-
-			lineNum = x.StartLine - 1
-			lines[lineNum] = lines[lineNum][:x.StartColumn-1] + Red + lines[lineNum][x.StartColumn-1:]
-		}
-
-		for num, line := range lines {
-			_, _ = fmt.Fprintf(stdout, "%d| %s\n", num+1, line)
-		}
+		inspect(args, stdout, stderr, fsys, files, moduleDir, exiter)
 		return
 	}
 
@@ -244,16 +232,21 @@ func Exec(command Command, args []string, stdout io.Writer, stderr io.Writer, fs
 	}
 
 	if command == Check {
-		actualCoveragePercent := float64(tree.Root.covered) * 100 / float64(tree.Root.allStatements)
-		if gocovConfig == nil {
-			_, _ = fmt.Fprintf(stderr, "Coverage check failed: .gocov file with threshold needs to be set\n")
-			exiter.Exit(1)
-		}
-		if actualCoveragePercent < gocovConfig.Threshold {
-			_, _ = fmt.Fprintf(stderr, "Coverage check failed: expected to have %.2f coverage, but got %.2f\n", gocovConfig.Threshold, actualCoveragePercent)
-			exiter.Exit(1)
-		}
+		check(stderr, tree, gocovConfig, exiter)
 		return
+	}
+}
+
+func check(stderr io.Writer, tree *Tree, gocovConfig *GocovConfig, exiter Exiter) {
+	actualCoveragePercent := float64(tree.Root.covered) * 100 / float64(tree.Root.allStatements)
+	if gocovConfig == nil {
+		_, _ = fmt.Fprintf(stderr, "Coverage check failed: .gocov file with threshold needs to be set\n")
+		exiter.Exit(1)
+		return
+	}
+	if actualCoveragePercent < gocovConfig.Threshold {
+		_, _ = fmt.Fprintf(stderr, "Coverage check failed: expected to have %.2f coverage, but got %.2f\n", gocovConfig.Threshold, actualCoveragePercent)
+		exiter.Exit(1)
 	}
 }
 
@@ -271,9 +264,9 @@ func NewTree(w io.Writer) *Tree {
 
 func (t *Tree) Render(config *Config, fileMaxLen, stmtsMaxLen int) {
 	w := t.writer
-	fmt.Fprintf(w, "|-%s-|-%s-|-%s-|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8))
-	fmt.Fprintf(w, "| %-*s | %*s | %*s |\n", fileMaxLen, "File", stmtsMaxLen+1, "Stmts", 8, "% Stmts")
-	fmt.Fprintf(w, "|-%s-|-%s-|-%s-|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8))
+	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8))
+	_, _ = fmt.Fprintf(w, "| %-*s | %*s | %*s |\n", fileMaxLen, "File", stmtsMaxLen+1, "Stmts", 8, "% Stmts")
+	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8))
 
 	sortOrder := make([]string, 0, len(t.Root.children))
 	for k := range t.Root.children {
@@ -285,7 +278,7 @@ func (t *Tree) Render(config *Config, fileMaxLen, stmtsMaxLen int) {
 		c := t.Root.children[k]
 		c.Render(w, config, 0, fileMaxLen, stmtsMaxLen)
 	}
-	fmt.Fprintf(w, "|-%s-|-%s-|-%s-|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8))
+	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8))
 }
 
 func (t *Tree) Accumulate() (int, int) {
@@ -324,7 +317,7 @@ func (n *Node) Accumulate(indent int) (int, int, int, int) {
 	return all, covered, maxPathLength, maxStmtsLength
 }
 
-func padPath(w io.Writer, maxFileLen int, path string, indent int) string {
+func padPath(maxFileLen int, path string, indent int) string {
 	return strings.Repeat(" ", maxFileLen-len(path)-(indent*2))
 }
 
@@ -342,9 +335,9 @@ func (n *Node) Render(w io.Writer, config *Config, indent int, fileMaxLen int, s
 		noColorValue = ""
 	}
 	stmtsPadding := stmtsMaxLen - digitsCount(n.allStatements) - digitsCount(n.covered)
-	fmt.Fprintf(w,
+	_, _ = fmt.Fprintf(w,
 		"|%s%s %s%s %s| %s%s%d/%d%s | %s%7.2f%%%s |\n",
-		color, strings.Repeat("  ", indent), n.path, padPath(w, fileMaxLen, n.path, indent), noColorValue,
+		color, strings.Repeat("  ", indent), n.path, padPath(fileMaxLen, n.path, indent), noColorValue,
 		color, strings.Repeat(" ", stmtsPadding), n.covered, n.allStatements, noColorValue,
 		color, percent, noColorValue,
 	)
@@ -407,9 +400,12 @@ func printReport(tree *Tree, config *Config, fileMaxLen, stmtsMaxLen int) {
 	tree.Render(config, fileMaxLen, stmtsMaxLen)
 }
 
-func getModule(fsys fs.FS) string {
+func getModule(fsys fs.FS, stderr io.Writer, exiter Exiter) string {
 	f, err := fsys.Open("go.mod")
-	check(err)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "failed to open go.mod file: %s", err.Error())
+		exiter.Exit(1)
+	}
 	defer func() { _ = f.Close() }()
 	scanner := bufio.NewScanner(f)
 	scanner.Scan()
@@ -432,7 +428,7 @@ func parseLine(line string) (*covReportLine, error) {
 		}
 		value, err := strconv.Atoi(line[prevIndex+1 : index])
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to parse line (%d) in coverage.out file: %w", index+1, err)
 		}
 		prevIndex = index
 
@@ -456,9 +452,61 @@ func parseLine(line string) (*covReportLine, error) {
 	return covLine, nil
 }
 
-func check(err error) {
+func inspect(args []string, stdout, stderr io.Writer, fsys fs.FS, files map[string]*covFile, moduleDir string, exiter Exiter) {
+	if len(args) < 1 {
+		_, _ = fmt.Fprintf(stderr, "no arguments provided to inspect command\n")
+		return
+	}
+	relPath := args[0]
+	var targetFile string
+	index := strings.IndexByte(relPath, '/')
+	if index == -1 {
+		targetFile = relPath
+	} else {
+		targetFile = relPath[index+1:]
+	}
+	file, ok := files[moduleDir+"/"+relPath]
+	if !ok {
+		_, _ = fmt.Fprintf(stderr, "failed to open %s", moduleDir+"/"+relPath)
+		exiter.Exit(1)
+		return
+	}
+	f2, err := fsys.Open(targetFile)
 	if err != nil {
-		panic(err)
+		_, _ = fmt.Fprintf(stderr, "failed to open file to inspect: %s", err.Error())
+		exiter.Exit(1)
+	}
+	defer func() { _ = f2.Close() }()
+
+	data, err := io.ReadAll(f2)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "failed to read target file to inspect: %s", err.Error())
+		exiter.Exit(1)
+	}
+
+	lines := strings.Split(string(data), "\n")
+
+	sort.Slice(file.Lines, func(i, j int) bool {
+		if file.Lines[i].EndLine == file.Lines[j].EndLine {
+			return file.Lines[i].StartColumn > file.Lines[j].StartColumn
+		}
+		return file.Lines[i].EndLine > file.Lines[j].EndLine
+	})
+
+	for _, x := range file.Lines {
+		if x.Hits > 0 {
+			continue
+		}
+
+		lineNum := x.EndLine - 1
+		lines[lineNum] = lines[lineNum][:x.EndColumn-1] + NoColor + lines[lineNum][x.EndColumn-1:]
+
+		lineNum = x.StartLine - 1
+		lines[lineNum] = lines[lineNum][:x.StartColumn-1] + Red + lines[lineNum][x.StartColumn-1:]
+	}
+
+	for num, line := range lines {
+		_, _ = fmt.Fprintf(stdout, "%d| %s\n", num+1, line)
 	}
 }
 

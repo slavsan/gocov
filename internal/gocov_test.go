@@ -1,3 +1,4 @@
+//nolint:funlen
 package internal_test
 
 import (
@@ -430,7 +431,7 @@ func TestStdoutReport(t *testing.T) {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 			exiter := &exiterMock{}
-			internal.Exec(internal.Report, []string{}, &stdout, &stderr, tc.fsys, tc.config, exiter)
+			internal.NewCommand().Exec(internal.Report, []string{}, &stdout, &stderr, tc.fsys, tc.config, exiter)
 			if tc.expected != stdout.String() {
 				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expected, stdout.String())
 			}
@@ -491,7 +492,7 @@ func TestCheckCoverage(t *testing.T) {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 			exiter := &exiterMock{}
-			internal.Exec(internal.Check, []string{}, &stdout, &stderr, tc.fsys, tc.config, exiter)
+			internal.NewCommand().Exec(internal.Check, []string{}, &stdout, &stderr, tc.fsys, tc.config, exiter)
 			if tc.expectedStdout != stdout.String() {
 				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStdout, stdout.String())
 			}
@@ -618,7 +619,7 @@ func TestInspect(t *testing.T) {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 			exiter := &exiterMock{}
-			internal.Exec(internal.Inspect, []string{"gocov/cmd/gocov.go"}, &stdout, &stderr, tc.fsys, tc.config, exiter)
+			internal.NewCommand().Exec(internal.Inspect, []string{"gocov/cmd/gocov.go"}, &stdout, &stderr, tc.fsys, tc.config, exiter)
 			if tc.expectedStdout != stdout.String() {
 				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStdout, stdout.String())
 			}

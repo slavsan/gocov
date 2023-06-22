@@ -31,7 +31,7 @@ func Exec() {
 		}
 	}
 
-	internal.Exec(
+	internal.NewCommand().Exec(
 		command,
 		args,
 		os.Stdout,
