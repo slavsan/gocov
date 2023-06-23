@@ -19,9 +19,10 @@ linters:
     - wsl
     - nlreturn
     - paralleltest
-    - godox
     - exhaustruct
     - gomnd
 linters-settings:
   cyclop:
     max-complexity: 13
+  funlen:
+    lines: 70

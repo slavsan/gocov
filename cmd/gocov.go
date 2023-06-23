@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"io/fs"
 	"os"
 
 	"github.com/slavsan/gocov/internal"
@@ -32,6 +33,6 @@ func Exec() {
 	}
 
 	internal.
-		NewCommand(os.Stdout, os.Stderr, os.DirFS("."), config, &internal.ProcessExiter{}).
+		NewCommand(os.Stdout, os.Stderr, os.DirFS(".").(fs.StatFS), config, &internal.ProcessExiter{}). //nolint:forcetypeassert
 		Exec(command, args)
 }

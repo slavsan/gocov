@@ -10,6 +10,7 @@ import (
 func (cmd *Cmd) Inspect(args []string, files map[string]*covFile, moduleDir string) {
 	if len(args) < 1 {
 		_, _ = fmt.Fprintf(cmd.stderr, "no arguments provided to inspect command\n")
+		cmd.exiter.Exit(1)
 		return
 	}
 	relPath := args[0]
@@ -30,6 +31,7 @@ func (cmd *Cmd) Inspect(args []string, files map[string]*covFile, moduleDir stri
 	if err != nil {
 		_, _ = fmt.Fprintf(cmd.stderr, "failed to open file to inspect: %s", err.Error())
 		cmd.exiter.Exit(1)
+		return
 	}
 	defer func() { _ = f2.Close() }()
 
@@ -37,6 +39,7 @@ func (cmd *Cmd) Inspect(args []string, files map[string]*covFile, moduleDir stri
 	if err != nil {
 		_, _ = fmt.Fprintf(cmd.stderr, "failed to read target file to inspect: %s", err.Error())
 		cmd.exiter.Exit(1)
+		return
 	}
 
 	lines := strings.Split(string(data), "\n")

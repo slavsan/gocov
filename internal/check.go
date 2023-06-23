@@ -7,7 +7,7 @@ import (
 func (cmd *Cmd) Check(tree *Tree, gocovConfig *GocovConfig) {
 	actualCoveragePercent := float64(tree.Root.covered) * 100 / float64(tree.Root.allStatements)
 	if gocovConfig == nil {
-		_, _ = fmt.Fprintf(cmd.stderr, "Coverage check failed: .gocov file with threshold needs to be set\n")
+		_, _ = fmt.Fprintf(cmd.stderr, "Coverage check failed: missing .gocov file with defined threshold\n")
 		cmd.exiter.Exit(1)
 		return
 	}

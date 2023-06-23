@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -11,6 +12,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+)
+
+var (
+	errInvalidGoMod        = errors.New("invalid go.mod file")
+	errInvalidCoverageFile = errors.New("invalid coverage file")
 )
 
 type Command int
@@ -68,10 +74,16 @@ func (p *ProcessExiter) Exit(code int) {
 	os.Exit(code)
 }
 
-func (cmd *Cmd) loadConfig() *GocovConfig {
+func (cmd *Cmd) loadConfig() (*GocovConfig, error) {
+	var conf *GocovConfig
+
+	if _, err := cmd.fsys.Stat(".gocov"); errors.Is(err, os.ErrNotExist) {
+		return conf, nil
+	}
+
 	f, err := cmd.fsys.Open(".gocov")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("failed to load .gocov file: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 
@@ -80,33 +92,30 @@ func (cmd *Cmd) loadConfig() *GocovConfig {
 
 	b, err := io.ReadAll(tee)
 	if err != nil {
-		_, _ = fmt.Fprintf(cmd.stderr, "internal error: failed to load .gocov config in memory: %s", err.Error())
-		cmd.exiter.Exit(1)
+		return nil, fmt.Errorf("internal error: failed to load .gocov config in memory: %w", err)
 	}
 
-	var conf *GocovConfig
 	err = json.Unmarshal(b, &conf)
 	if err != nil {
-		_, _ = fmt.Fprintf(cmd.stderr, "failed to parse .gocov config file: %s\n", err)
-		cmd.exiter.Exit(1)
+		return nil, fmt.Errorf("failed to parse .gocov config file: %w", err)
 	}
 
 	if conf != nil {
 		conf.Contents = buf.Bytes()
 	}
 
-	return conf
+	return conf, nil
 }
 
 type Cmd struct {
 	stdout io.Writer
 	stderr io.Writer
-	fsys   fs.FS
+	fsys   fs.StatFS
 	config *Config
 	exiter Exiter
 }
 
-func NewCommand(stdout io.Writer, stderr io.Writer, fsys fs.FS, config *Config, exiter Exiter) *Cmd {
+func NewCommand(stdout io.Writer, stderr io.Writer, fsys fs.StatFS, config *Config, exiter Exiter) *Cmd {
 	return &Cmd{
 		stdout: stdout,
 		stderr: stderr,
@@ -116,19 +125,29 @@ func NewCommand(stdout io.Writer, stderr io.Writer, fsys fs.FS, config *Config, 
 	}
 }
 
-func parseCoverageFile(f io.Reader, stdout, stderr io.Writer, exiter Exiter, gocovConfig *GocovConfig, moduleDir string) (*Tree, map[string]*covFile) {
+func (cmd *Cmd) parseCoverageFile(gocovConfig *GocovConfig, moduleDir string) (*Tree, map[string]*covFile, error) {
 	var (
+		f           fs.File
+		err         error
 		colonIndex  int
 		currentLine int
 		all         int64
 		covered     int64
 		files       = map[string]*covFile{}
+		covLine     *covReportLine
 	)
+
+	f, err = cmd.fsys.Open("coverage.out")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to open coverage.out: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
 	scanner := bufio.NewScanner(f)
 	scanner.Scan() // skip the `mode` line
 	currentLine++
 	if line := scanner.Text(); !strings.HasPrefix(line, "mode: ") {
-		panic("invalid coverage file")
+		return nil, nil, errInvalidCoverageFile
 	}
 	for scanner.Scan() {
 		currentLine++
@@ -140,10 +159,9 @@ func parseCoverageFile(f io.Reader, stdout, stderr io.Writer, exiter Exiter, goc
 			files[name] = &covFile{Name: name}
 		}
 
-		covLine, err := parseLine(line[colonIndex+1:])
+		covLine, err = parseLine(line[colonIndex+1:])
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "failed to parse coverage file on line %d\n", currentLine)
-			exiter.Exit(1)
+			return nil, nil, fmt.Errorf("failed to parse coverage file on line %d", currentLine) //nolint:goerr113
 		}
 		files[name].Lines = append(files[name].Lines, covLine)
 
@@ -160,7 +178,7 @@ func parseCoverageFile(f io.Reader, stdout, stderr io.Writer, exiter Exiter, goc
 		f.Path = strings.TrimPrefix(f.Name, moduleDir+"/")
 	}
 
-	tree := NewTree(stdout)
+	tree := NewTree(cmd.stdout)
 	for _, v := range files {
 		if isIgnored(v, gocovConfig) {
 			continue
@@ -168,7 +186,7 @@ func parseCoverageFile(f io.Reader, stdout, stderr io.Writer, exiter Exiter, goc
 		tree.Add(v.Path, v)
 	}
 
-	return tree, files
+	return tree, files, nil
 }
 
 func (cmd *Cmd) Exec(command Command, args []string) {
@@ -178,25 +196,38 @@ func (cmd *Cmd) Exec(command Command, args []string) {
 	}
 
 	var (
-		f           fs.File
+		module      string
+		gocovConfig *GocovConfig
 		err         error
-		moduleDir   = filepath.Dir(getModule(cmd.fsys, cmd.stderr, cmd.exiter))
-		gocovConfig = cmd.loadConfig()
 	)
+
+	gocovConfig, err = cmd.loadConfig()
+	if err != nil {
+		_, _ = fmt.Fprint(cmd.stderr, err.Error())
+		cmd.exiter.Exit(1)
+		return
+	}
 
 	if command == ConfigFile {
 		cmd.Config(gocovConfig)
 		return
 	}
 
-	f, err = cmd.fsys.Open("coverage.out")
+	module, err = getModule(cmd.fsys)
 	if err != nil {
-		_, _ = fmt.Fprintf(cmd.stderr, "failed to open coverage.out: %s", err.Error())
+		_, _ = fmt.Fprint(cmd.stderr, err.Error())
 		cmd.exiter.Exit(1)
+		return
 	}
-	defer func() { _ = f.Close() }()
 
-	tree, files := parseCoverageFile(f, cmd.stdout, cmd.stderr, cmd.exiter, gocovConfig, moduleDir)
+	moduleDir := filepath.Dir(module)
+
+	tree, files, err := cmd.parseCoverageFile(gocovConfig, moduleDir)
+	if err != nil {
+		_, _ = fmt.Fprint(cmd.stderr, err.Error())
+		cmd.exiter.Exit(1)
+		return
+	}
 	fileMaxLen, stmtsMaxLen := tree.Accumulate()
 
 	if command == Inspect {
@@ -239,20 +270,19 @@ func isIgnored(f *covFile, config *GocovConfig) bool {
 	return false
 }
 
-func getModule(fsys fs.FS, stderr io.Writer, exiter Exiter) string {
+func getModule(fsys fs.StatFS) (string, error) {
 	f, err := fsys.Open("go.mod")
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "failed to open go.mod file: %s", err.Error())
-		exiter.Exit(1)
+		return "", fmt.Errorf("failed to open go.mod file: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 	scanner := bufio.NewScanner(f)
 	scanner.Scan()
 	line := scanner.Text()
 	if !strings.HasPrefix(line, "module ") {
-		panic("invalid go.mod file")
+		return "", errInvalidGoMod
 	}
-	return strings.TrimPrefix(line, "module ")
+	return strings.TrimPrefix(line, "module "), nil
 }
 
 func parseLine(line string) (*covReportLine, error) {
