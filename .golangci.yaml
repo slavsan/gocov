@@ -1,0 +1,28 @@
+linters:
+  enable-all: true
+  disable:
+    - lll
+    - structcheck
+    - interfacer
+    - nosnakecase
+    - scopelint
+    - maligned
+    - deadcode
+    - exhaustivestruct
+    - golint
+    - varcheck
+    - ifshort
+    - rowserrcheck
+    - sqlclosecheck
+    - wastedassign
+    - varnamelen
+    - wsl
+    - nlreturn
+    - paralleltest
+    - exhaustruct
+    - gomnd
+linters-settings:
+  cyclop:
+    max-complexity: 13
+  funlen:
+    lines: 70

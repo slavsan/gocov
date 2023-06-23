@@ -1,3 +1,4 @@
+//nolint:funlen
 package internal_test
 
 import (
@@ -319,10 +320,12 @@ github.com/slavsan/gospec/gospec.go:232.49,239.2 1 426
 
 func TestStdoutReport(t *testing.T) {
 	testCases := []struct {
-		title    string
-		fsys     fs.FS
-		config   *internal.Config
-		expected string
+		title            string
+		fsys             fs.StatFS
+		config           *internal.Config
+		expectedStdout   string
+		expectedStderr   string
+		expectedExitCode int
 	}{
 		{
 			title: "with example coverage.out file and stdout report and colors disabled",
@@ -333,7 +336,7 @@ func TestStdoutReport(t *testing.T) {
 			config: &internal.Config{
 				Color: false,
 			},
-			expected: strings.Join([]string{
+			expectedStdout: strings.Join([]string{
 				`|--------------------|---------|----------|`,
 				`| File               |   Stmts |  % Stmts |`,
 				`|--------------------|---------|----------|`,
@@ -346,6 +349,8 @@ func TestStdoutReport(t *testing.T) {
 				`|--------------------|---------|----------|`,
 				``,
 			}, "\n"),
+			expectedStderr:   "",
+			expectedExitCode: 0,
 		},
 		{
 			title: "with example coverage.out file and stdout report and colors enabled",
@@ -356,7 +361,7 @@ func TestStdoutReport(t *testing.T) {
 			config: &internal.Config{
 				Color: true,
 			},
-			expected: strings.Join([]string{
+			expectedStdout: strings.Join([]string{
 				"|--------------------|---------|----------|",
 				"| File               |   Stmts |  % Stmts |",
 				"|--------------------|---------|----------|",
@@ -369,6 +374,8 @@ func TestStdoutReport(t *testing.T) {
 				"|--------------------|---------|----------|",
 				"",
 			}, "\n"),
+			expectedStderr:   "",
+			expectedExitCode: 0,
 		},
 		{
 			title: "with another example coverage.out file and stdout report",
@@ -379,7 +386,7 @@ func TestStdoutReport(t *testing.T) {
 			config: &internal.Config{
 				Color: false,
 			},
-			expected: strings.Join([]string{
+			expectedStdout: strings.Join([]string{
 				`|----------------|---------|----------|`,
 				`| File           |   Stmts |  % Stmts |`,
 				`|----------------|---------|----------|`,
@@ -392,6 +399,8 @@ func TestStdoutReport(t *testing.T) {
 				`|----------------|---------|----------|`,
 				``,
 			}, "\n"),
+			expectedStderr:   "",
+			expectedExitCode: 0,
 		},
 		{
 			title: "with .gocov file specifying one file to ignore",
@@ -409,7 +418,7 @@ func TestStdoutReport(t *testing.T) {
 			config: &internal.Config{
 				Color: false,
 			},
-			expected: strings.Join([]string{
+			expectedStdout: strings.Join([]string{
 				`|----------------|---------|----------|`,
 				`| File           |   Stmts |  % Stmts |`,
 				`|----------------|---------|----------|`,
@@ -421,6 +430,72 @@ func TestStdoutReport(t *testing.T) {
 				`|----------------|---------|----------|`,
 				``,
 			}, "\n"),
+			expectedStderr:   "",
+			expectedExitCode: 0,
+		},
+		{
+			title: "with invalid coverage.out file, invalid column value",
+			fsys: fstest.MapFS{
+				"go.mod": {Data: []byte(`module github.com/slavsan/gocov`)},
+				"coverage.out": {Data: []byte(strings.Join([]string{
+					`mode: atomic`,
+					`github.com/slavsan/gocov/cmd/gocov.go:9.13,16.22 x 0`,
+				}, "\n"))},
+				".gocov": {Data: []byte(strings.Join([]string{
+					`{`,
+					`	"ignore": [`,
+					`		"gocov/main.go"`,
+					`	]`,
+					`}`,
+				}, "\n"))},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "failed to parse coverage file on line 2",
+			expectedExitCode: 1,
+		},
+		{
+			title: "with invalid coverage.out file, invalid first line",
+			fsys: fstest.MapFS{
+				"go.mod": {Data: []byte(`module github.com/slavsan/gocov`)},
+				"coverage.out": {Data: []byte(strings.Join([]string{
+					`foo: atomic`,
+					`github.com/slavsan/gocov/cmd/gocov.go:9.13,16.22 10 0`,
+				}, "\n"))},
+				".gocov": {Data: []byte(strings.Join([]string{
+					`{`,
+					`	"ignore": [`,
+					`		"gocov/main.go"`,
+					`	]`,
+					`}`,
+				}, "\n"))},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "invalid coverage file",
+			expectedExitCode: 1,
+		},
+		{
+			title: "with invalid .gocov file",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gocov`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut)},
+				".gocov": {Data: []byte(strings.Join([]string{
+					`{`,
+					`	"ignore": [`,
+					`		"goc`,
+				}, "\n"))},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "failed to parse .gocov config file: unexpected end of JSON input",
+			expectedExitCode: 1,
 		},
 	}
 
@@ -430,9 +505,15 @@ func TestStdoutReport(t *testing.T) {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 			exiter := &exiterMock{}
-			internal.Exec(internal.Report, []string{}, &stdout, &stderr, tc.fsys, tc.config, exiter)
-			if tc.expected != stdout.String() {
-				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expected, stdout.String())
+			internal.NewCommand(&stdout, &stderr, tc.fsys, tc.config, exiter).Exec(internal.Report, []string{})
+			if tc.expectedStdout != stdout.String() {
+				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStdout, stdout.String())
+			}
+			if tc.expectedStderr != stderr.String() {
+				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStderr, stderr.String())
+			}
+			if tc.expectedExitCode != exiter.code {
+				t.Errorf("exit code does not match\n\texpected:\n`%d`\n\tactual:\n`%d`\n", tc.expectedExitCode, exiter.code)
 			}
 		})
 	}
@@ -441,7 +522,7 @@ func TestStdoutReport(t *testing.T) {
 func TestCheckCoverage(t *testing.T) {
 	testCases := []struct {
 		title            string
-		fsys             fs.FS
+		fsys             fs.StatFS
 		config           *internal.Config
 		expectedStdout   string
 		expectedStderr   string
@@ -483,6 +564,44 @@ func TestCheckCoverage(t *testing.T) {
 			expectedStderr:   "",
 			expectedExitCode: 0,
 		},
+		{
+			title: "with missing .gocov file",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut)},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "Coverage check failed: missing .gocov file with defined threshold\n",
+			expectedExitCode: 1,
+		},
+		{
+			title: "with missing go.mod file",
+			fsys: fstest.MapFS{
+				"coverage.out": {Data: []byte(exampleCoverageOut)},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "failed to open go.mod file: open go.mod: file does not exist",
+			expectedExitCode: 1,
+		},
+		{
+			title: "with invalid go.mod file",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`foo github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut)},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "invalid go.mod file",
+			expectedExitCode: 1,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -491,7 +610,81 @@ func TestCheckCoverage(t *testing.T) {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 			exiter := &exiterMock{}
-			internal.Exec(internal.Check, []string{}, &stdout, &stderr, tc.fsys, tc.config, exiter)
+			internal.NewCommand(&stdout, &stderr, tc.fsys, tc.config, exiter).Exec(internal.Check, []string{})
+			if tc.expectedStdout != stdout.String() {
+				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStdout, stdout.String())
+			}
+			if tc.expectedStderr != stderr.String() {
+				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStderr, stderr.String())
+			}
+			if tc.expectedExitCode != exiter.code {
+				t.Errorf("exit code does not match\n\texpected:\n`%d`\n\tactual:\n`%d`\n", tc.expectedExitCode, exiter.code)
+			}
+		})
+	}
+}
+
+func TestConfigFile(t *testing.T) {
+	testCases := []struct {
+		title            string
+		fsys             fs.StatFS
+		config           *internal.Config
+		expectedStdout   string
+		expectedStderr   string
+		expectedExitCode int
+	}{
+		{
+			title: "with missing config file should return a default config",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut)},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout: strings.Join([]string{
+				`{`,
+				`  "threshold": 50,`,
+				`  "ignore": [`,
+				`  ]`,
+				`}`,
+				``,
+			}, "\n"),
+			expectedStderr:   "",
+			expectedExitCode: 0,
+		},
+		{
+			title: "with defined config file should just return it",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut)},
+				".gocov": {Data: []byte(strings.Join([]string{
+					`{`,
+					`  "threshold": 75.52`,
+					`}`,
+				}, "\n"))},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout: strings.Join([]string{
+				`{`,
+				`  "threshold": 75.52`,
+				`}`,
+				``,
+			}, "\n"),
+			expectedStderr:   "",
+			expectedExitCode: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.title, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			exiter := &exiterMock{}
+			internal.NewCommand(&stdout, &stderr, tc.fsys, tc.config, exiter).Exec(internal.ConfigFile, []string{})
 			if tc.expectedStdout != stdout.String() {
 				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStdout, stdout.String())
 			}
@@ -508,8 +701,9 @@ func TestCheckCoverage(t *testing.T) {
 func TestInspect(t *testing.T) {
 	testCases := []struct {
 		title            string
-		fsys             fs.FS
+		fsys             fs.StatFS
 		config           *internal.Config
+		args             []string
 		expectedStdout   string
 		expectedStderr   string
 		expectedExitCode int
@@ -561,6 +755,7 @@ func TestInspect(t *testing.T) {
 					``,
 				}, "\n"))},
 			},
+			args: []string{"gocov/cmd/gocov.go"},
 			config: &internal.Config{
 				Color: false,
 			},
@@ -609,7 +804,34 @@ func TestInspect(t *testing.T) {
 			expectedStderr:   "",
 			expectedExitCode: 0,
 		},
-		// TODO: when printing excerpts
+		{
+			title: "when no arguments provided",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut3)},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			args:             []string{},
+			expectedStdout:   "",
+			expectedStderr:   "no arguments provided to inspect command\n",
+			expectedExitCode: 1,
+		},
+		{
+			title: "when target file which does not exist",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut3)},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			args:             []string{"does/not/exist"},
+			expectedStdout:   "",
+			expectedStderr:   "failed to open github.com/slavsan/does/not/exist",
+			expectedExitCode: 1,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -618,7 +840,7 @@ func TestInspect(t *testing.T) {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 			exiter := &exiterMock{}
-			internal.Exec(internal.Inspect, []string{"gocov/cmd/gocov.go"}, &stdout, &stderr, tc.fsys, tc.config, exiter)
+			internal.NewCommand(&stdout, &stderr, tc.fsys, tc.config, exiter).Exec(internal.Inspect, tc.args)
 			if tc.expectedStdout != stdout.String() {
 				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStdout, stdout.String())
 			}

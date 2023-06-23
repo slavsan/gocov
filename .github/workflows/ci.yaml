@@ -1,0 +1,30 @@
+name: Go package
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.19'
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.49
+          args: --timeout=2m --config=.golangci.yaml --issues-exit-code=0
+
+      - name: Test
+        run: go test -race -v ./...
+
+      - name: Check coverage
+        run: go run main.go test && go run main.go && go run main.go check
