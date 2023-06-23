@@ -22,7 +22,7 @@ var (
 type Command int
 
 const (
-	Report Command = iota
+	Report Command = iota + 1
 	Check
 	Inspect
 	Test
