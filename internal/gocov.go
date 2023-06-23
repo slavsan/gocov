@@ -38,6 +38,7 @@ const (
 
 type Config struct {
 	Color bool
+	File  *GocovConfig
 }
 
 type GocovConfig struct {
@@ -74,16 +75,16 @@ func (p *ProcessExiter) Exit(code int) {
 	os.Exit(code)
 }
 
-func (cmd *Cmd) loadConfig() (*GocovConfig, error) {
+func (cmd *Cmd) loadConfig() error {
 	var conf *GocovConfig
 
 	if _, err := cmd.fsys.Stat(".gocov"); errors.Is(err, os.ErrNotExist) {
-		return conf, nil
+		return nil
 	}
 
 	f, err := cmd.fsys.Open(".gocov")
 	if err != nil {
-		return nil, fmt.Errorf("failed to load .gocov file: %w", err)
+		return fmt.Errorf("failed to load .gocov file: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 
@@ -92,19 +93,21 @@ func (cmd *Cmd) loadConfig() (*GocovConfig, error) {
 
 	b, err := io.ReadAll(tee)
 	if err != nil {
-		return nil, fmt.Errorf("internal error: failed to load .gocov config in memory: %w", err)
+		return fmt.Errorf("internal error: failed to load .gocov config in memory: %w", err)
 	}
 
 	err = json.Unmarshal(b, &conf)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse .gocov config file: %w", err)
+		return fmt.Errorf("failed to parse .gocov config file: %w", err)
 	}
 
 	if conf != nil {
 		conf.Contents = buf.Bytes()
 	}
 
-	return conf, nil
+	cmd.config.File = conf
+
+	return nil
 }
 
 type Cmd struct {
@@ -125,7 +128,7 @@ func NewCommand(stdout io.Writer, stderr io.Writer, fsys fs.StatFS, config *Conf
 	}
 }
 
-func (cmd *Cmd) parseCoverageFile(gocovConfig *GocovConfig, moduleDir string) (*Tree, map[string]*covFile, error) {
+func (cmd *Cmd) parseCoverageFile(moduleDir string) (*Tree, map[string]*covFile, error) {
 	var (
 		f           fs.File
 		err         error
@@ -180,7 +183,7 @@ func (cmd *Cmd) parseCoverageFile(gocovConfig *GocovConfig, moduleDir string) (*
 
 	tree := NewTree(cmd.stdout)
 	for _, v := range files {
-		if isIgnored(v, gocovConfig) {
+		if isIgnored(v, cmd.config.File) {
 			continue
 		}
 		tree.Add(v.Path, v)
@@ -195,13 +198,7 @@ func (cmd *Cmd) Exec(command Command, args []string) {
 		return
 	}
 
-	var (
-		module      string
-		gocovConfig *GocovConfig
-		err         error
-	)
-
-	gocovConfig, err = cmd.loadConfig()
+	err := cmd.loadConfig()
 	if err != nil {
 		_, _ = fmt.Fprint(cmd.stderr, err.Error())
 		cmd.exiter.Exit(1)
@@ -209,11 +206,11 @@ func (cmd *Cmd) Exec(command Command, args []string) {
 	}
 
 	if command == ConfigFile {
-		cmd.Config(gocovConfig)
+		cmd.Config()
 		return
 	}
 
-	module, err = getModule(cmd.fsys)
+	module, err := getModule(cmd.fsys)
 	if err != nil {
 		_, _ = fmt.Fprint(cmd.stderr, err.Error())
 		cmd.exiter.Exit(1)
@@ -222,7 +219,7 @@ func (cmd *Cmd) Exec(command Command, args []string) {
 
 	moduleDir := filepath.Dir(module)
 
-	tree, files, err := cmd.parseCoverageFile(gocovConfig, moduleDir)
+	tree, files, err := cmd.parseCoverageFile(moduleDir)
 	if err != nil {
 		_, _ = fmt.Fprint(cmd.stderr, err.Error())
 		cmd.exiter.Exit(1)
@@ -241,7 +238,7 @@ func (cmd *Cmd) Exec(command Command, args []string) {
 	}
 
 	if command == Check {
-		cmd.Check(tree, gocovConfig)
+		cmd.Check(tree)
 		return
 	}
 }

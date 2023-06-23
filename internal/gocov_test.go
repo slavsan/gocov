@@ -703,6 +703,7 @@ func TestInspect(t *testing.T) {
 		title            string
 		fsys             fs.StatFS
 		config           *internal.Config
+		args             []string
 		expectedStdout   string
 		expectedStderr   string
 		expectedExitCode int
@@ -754,6 +755,7 @@ func TestInspect(t *testing.T) {
 					``,
 				}, "\n"))},
 			},
+			args: []string{"gocov/cmd/gocov.go"},
 			config: &internal.Config{
 				Color: false,
 			},
@@ -802,6 +804,34 @@ func TestInspect(t *testing.T) {
 			expectedStderr:   "",
 			expectedExitCode: 0,
 		},
+		{
+			title: "when no arguments provided",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut3)},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			args:             []string{},
+			expectedStdout:   "",
+			expectedStderr:   "no arguments provided to inspect command\n",
+			expectedExitCode: 1,
+		},
+		{
+			title: "when target file which does not exist",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut3)},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			args:             []string{"does/not/exist"},
+			expectedStdout:   "",
+			expectedStderr:   "failed to open github.com/slavsan/does/not/exist",
+			expectedExitCode: 1,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -810,7 +840,7 @@ func TestInspect(t *testing.T) {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 			exiter := &exiterMock{}
-			internal.NewCommand(&stdout, &stderr, tc.fsys, tc.config, exiter).Exec(internal.Inspect, []string{"gocov/cmd/gocov.go"})
+			internal.NewCommand(&stdout, &stderr, tc.fsys, tc.config, exiter).Exec(internal.Inspect, tc.args)
 			if tc.expectedStdout != stdout.String() {
 				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStdout, stdout.String())
 			}

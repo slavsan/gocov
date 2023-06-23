@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-func (cmd *Cmd) Config(gocovConfig *GocovConfig) {
-	if gocovConfig != nil {
-		_, _ = fmt.Fprintf(cmd.stdout, "%s\n", gocovConfig.Contents)
+func (cmd *Cmd) Config() {
+	if cmd.config.File != nil {
+		_, _ = fmt.Fprintf(cmd.stdout, "%s\n", cmd.config.File.Contents)
 		return
 	}
 	_, _ = fmt.Fprintf(cmd.stdout, strings.Join([]string{ //nolint:staticcheck // SA1006
