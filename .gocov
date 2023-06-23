@@ -1,5 +1,5 @@
 {
-    "threshold": 80,
+    "threshold": 95,
     "ignore": [
         "gocov/main.go"
     ]

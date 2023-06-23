@@ -19,3 +19,6 @@ jobs:
 
       - name: Test
         run: go test -race -v ./...
+
+      - name: Check coverage
+        run: go run main.go test && go run main.go && go run main.go check
