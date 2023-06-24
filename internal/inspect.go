@@ -63,7 +63,8 @@ func (cmd *Cmd) Inspect(args []string, files map[string]*covFile, moduleDir stri
 		lines[lineNum] = lines[lineNum][:x.StartColumn-1] + Red + lines[lineNum][x.StartColumn-1:]
 	}
 
+	width := digitsCount(len(lines) - 1)
 	for num, line := range lines {
-		_, _ = fmt.Fprintf(cmd.stdout, "%d| %s\n", num+1, line)
+		_, _ = fmt.Fprintf(cmd.stdout, "%*d| %s\n", width, num+1, line)
 	}
 }
