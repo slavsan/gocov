@@ -7,6 +7,11 @@ import (
 	"strings"
 )
 
+const (
+	percentFillSymbol  = "\u25A0"
+	percentEmptySymbol = " "
+)
+
 type Tree struct {
 	Root   *Node
 	writer io.Writer
@@ -21,9 +26,9 @@ func NewTree(w io.Writer) *Tree {
 
 func (t *Tree) Render(config *Config, fileMaxLen, stmtsMaxLen int) {
 	w := t.writer
-	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8))
-	_, _ = fmt.Fprintf(w, "| %-*s | %*s | %*s |\n", fileMaxLen, "File", stmtsMaxLen+1, "Stmts", 8, "% Stmts")
-	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8))
+	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|-%s|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8), strings.Repeat("-", 11))
+	_, _ = fmt.Fprintf(w, "| %-*s | %*s | %*s | %*s |\n", fileMaxLen, "File", stmtsMaxLen+1, "Stmts", 8, "% Stmts", 10, "Progress")
+	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|-%s-|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8), strings.Repeat("-", 10))
 
 	sortOrder := make([]string, 0, len(t.Root.children))
 	for k := range t.Root.children {
@@ -35,7 +40,7 @@ func (t *Tree) Render(config *Config, fileMaxLen, stmtsMaxLen int) {
 		c := t.Root.children[k]
 		c.Render(w, config, 0, fileMaxLen, stmtsMaxLen)
 	}
-	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8))
+	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|-%s-|\n", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8), strings.Repeat("-", 10))
 }
 
 func (t *Tree) Accumulate() (int, int) {
@@ -89,10 +94,11 @@ func (n *Node) Render(w io.Writer, config *Config, indent int, fileMaxLen int, s
 	}
 	stmtsPadding := stmtsMaxLen - digitsCount(n.allStatements) - digitsCount(n.covered)
 	_, _ = fmt.Fprintf(w,
-		"|%s%s %s%s %s| %s%s%d/%d%s | %s%7.2f%%%s |\n",
+		"|%s%s %s%s %s| %s%s%d/%d%s | %s%7.2f%%%s | %s%s%s |\n",
 		color, strings.Repeat("  ", indent), n.path, padPath(fileMaxLen, n.path, indent), noColorValue,
 		color, strings.Repeat(" ", stmtsPadding), n.covered, n.allStatements, noColorValue,
 		color, percent, noColorValue,
+		color, strings.Repeat(percentFillSymbol, progressbar(percent))+strings.Repeat(percentEmptySymbol, 10-progressbar(percent)), noColorValue,
 	)
 	sortOrder := make([]string, 0, len(n.children))
 	for k := range n.children {
@@ -127,4 +133,8 @@ func (n *Node) Add(path string, value *covFile) {
 		n.children[path[:index]] = &Node{path: path[:index], children: map[string]*Node{}}
 	}
 	n.children[path[:index]].Add(path[index+1:], value)
+}
+
+func progressbar(percent float64) int {
+	return int(percent / 10)
 }
