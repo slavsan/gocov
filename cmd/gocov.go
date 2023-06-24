@@ -60,5 +60,5 @@ help		- show this help message
 `
 
 func printUsage() {
-	fmt.Printf(usage)
+	_, _ = fmt.Fprint(os.Stdout, usage)
 }
