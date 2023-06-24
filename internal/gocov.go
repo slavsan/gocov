@@ -38,6 +38,7 @@ const (
 
 type Config struct {
 	Color bool
+	Depth int
 	File  *GocovConfig
 }
 

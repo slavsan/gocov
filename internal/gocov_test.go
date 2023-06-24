@@ -434,6 +434,30 @@ func TestStdoutReport(t *testing.T) {
 			expectedExitCode: 0,
 		},
 		{
+			title: "with the depth flag provided",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gocov`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut2)},
+			},
+			config: &internal.Config{
+				Color: false,
+				Depth: 1,
+			},
+			expectedStdout: strings.Join([]string{
+				`|----------------|---------|----------|------------|`,
+				`| File           |   Stmts |  % Stmts |   Progress |`,
+				`|----------------|---------|----------|------------|`,
+				`| gocov          | 133/142 |   93.66% | ■■■■■■■■■  |`,
+				`|   cmd          |     0/3 |    0.00% |            |`,
+				`|   internal     | 133/138 |   96.38% | ■■■■■■■■■  |`,
+				`|   main.go      |     0/1 |    0.00% |            |`,
+				`|----------------|---------|----------|------------|`,
+				``,
+			}, "\n"),
+			expectedStderr:   "",
+			expectedExitCode: 0,
+		},
+		{
 			title: "with invalid coverage.out file, invalid column value",
 			fsys: fstest.MapFS{
 				"go.mod": {Data: []byte(`module github.com/slavsan/gocov`)},

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -10,11 +11,15 @@ import (
 
 func Exec() {
 	var (
+		err     error
 		command internal.Command
 		args    []string
 		config  = &internal.Config{
 			Color: true,
 		}
+
+		reportCmd   = flag.NewFlagSet("report", flag.ExitOnError)
+		reportDepth = reportCmd.Int("depth", 0, "report on files and directories of certain depth")
 	)
 
 	if len(os.Args) == 1 {
@@ -28,6 +33,14 @@ func Exec() {
 		return
 	case "report":
 		command = internal.Report
+		err = reportCmd.Parse(os.Args[2:])
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "failed to parse args: %s", err.Error())
+			printUsage()
+			os.Exit(1)
+		}
+		config.Depth = *reportDepth
+		args = reportCmd.Args()
 	case "test":
 		command = internal.Test
 	case "config":

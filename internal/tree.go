@@ -80,6 +80,9 @@ func (n *Node) Accumulate(indent int) (int, int, int, int) {
 }
 
 func (n *Node) Render(w io.Writer, config *Config, indent int, fileMaxLen int, stmtsMaxLen int) {
+	if config.Depth != 0 && indent > config.Depth {
+		return
+	}
 	percent := getPercent(n)
 	color := Red
 	noColorValue := NoColor
