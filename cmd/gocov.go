@@ -5,8 +5,14 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"strings"
 
 	"github.com/slavsan/gocov/internal"
+)
+
+const (
+	depthFlagDesc   = "report on files and directories of certain depth"
+	noColorFlagDesc = "disable color output"
 )
 
 func Exec() {
@@ -17,10 +23,29 @@ func Exec() {
 		config  = &internal.Config{
 			Color: true,
 		}
+		reportDepth int
+		noColor     bool
 
-		reportCmd   = flag.NewFlagSet("report", flag.ExitOnError)
-		reportDepth = reportCmd.Int("depth", 0, "report on files and directories of certain depth")
+		reportCmd = flag.NewFlagSet("report", flag.ExitOnError)
 	)
+
+	reportCmd.IntVar(&reportDepth, "depth", 0, depthFlagDesc)
+	reportCmd.IntVar(&reportDepth, "d", 0, depthFlagDesc)
+	reportCmd.BoolVar(&noColor, "no-color", false, noColorFlagDesc)
+
+	reportCmd.Usage = func() {
+		_, _ = fmt.Fprintf(
+			os.Stdout, strings.Join([]string{
+				`Usage of report:`,
+				`  -d, --depth int`,
+				`      %s`,
+				`  --no-color`,
+				`      %s`,
+				``,
+			}, "\n"),
+			depthFlagDesc, noColorFlagDesc,
+		)
+	}
 
 	if len(os.Args) == 1 {
 		printUsage()
@@ -39,7 +64,8 @@ func Exec() {
 			printUsage()
 			os.Exit(1)
 		}
-		config.Depth = *reportDepth
+		config.Depth = reportDepth
+		config.Color = !noColor
 		args = reportCmd.Args()
 	case "test":
 		command = internal.Test
