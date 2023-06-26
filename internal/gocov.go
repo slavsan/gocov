@@ -37,9 +37,10 @@ const (
 )
 
 type Config struct {
-	Color bool
-	Depth int
-	File  *GocovConfig
+	Color        bool
+	Depth        int
+	File         *GocovConfig
+	WithFullPath bool
 }
 
 type GocovConfig struct {
@@ -226,7 +227,7 @@ func (cmd *Cmd) Exec(command Command, args []string) {
 		cmd.exiter.Exit(1)
 		return
 	}
-	fileMaxLen, stmtsMaxLen := tree.Accumulate()
+	fileMaxLen, stmtsMaxLen, fullPathMaxLen := tree.Accumulate()
 
 	if command == Inspect {
 		cmd.Inspect(args, files, moduleDir)
@@ -234,7 +235,7 @@ func (cmd *Cmd) Exec(command Command, args []string) {
 	}
 
 	if command == Report {
-		cmd.Report(tree, cmd.config, fileMaxLen, stmtsMaxLen)
+		cmd.Report(tree, cmd.config, fileMaxLen, stmtsMaxLen, fullPathMaxLen, args)
 		return
 	}
 
@@ -253,7 +254,7 @@ func getPercent(n *Node) float64 {
 }
 
 func (t *Tree) Add(path string, value *covFile) {
-	t.Root.Add(path, value)
+	t.Root.Add(path, path, value, 0)
 }
 
 func isIgnored(f *covFile, config *GocovConfig) bool {
