@@ -16,7 +16,7 @@ const (
 	withFullPathDesc = "include the full path column in the output"
 )
 
-func Exec() {
+func Exec() { //nolint:funlen
 	var (
 		err     error
 		command internal.Command
