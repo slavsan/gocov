@@ -50,7 +50,7 @@ func (t *Tree) Render(config *Config, stats Stats, args []string) {
 
 	for _, k := range sortOrder {
 		c := t.Root.children[k]
-		c.Render(w, config, 0, stats.FileMaxLen, stats.StmtsMaxLen, stats.FullPathMaxLen, args)
+		c.Render(w, config, stats, args)
 	}
 	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|-%s-|", strings.Repeat("-", stats.FileMaxLen), strings.Repeat("-", stats.StmtsMaxLen+1), strings.Repeat("-", 8), strings.Repeat("-", 10))
 	if config.WithFullPath {
@@ -71,17 +71,17 @@ type Stats struct {
 }
 
 func (t *Tree) Accumulate() Stats {
-	return t.Root.Accumulate(0)
+	return t.Root.Accumulate()
 }
 
-func (n *Node) Accumulate(indent int) Stats {
+func (n *Node) Accumulate() Stats {
 	var all, covered, maxPathLength, maxStmtsLength, fullPathMaxLen int
 	if n.value != nil {
 		all = n.value.AllStatements
 		covered = n.value.Covered
 	}
 	for _, cn := range n.children {
-		stats := cn.Accumulate(indent + 1)
+		stats := cn.Accumulate()
 		all, covered = all+stats.All, covered+stats.Covered
 		if stats.FileMaxLen > maxPathLength {
 			maxPathLength = stats.FileMaxLen
@@ -95,7 +95,7 @@ func (n *Node) Accumulate(indent int) Stats {
 	}
 	n.allStatements = all
 	n.covered = covered
-	pathLength := (indent * 2) + len(n.path)
+	pathLength := (n.level * 2) + len(n.path)
 	if pathLength > maxPathLength {
 		maxPathLength = pathLength
 	}
@@ -103,9 +103,9 @@ func (n *Node) Accumulate(indent int) Stats {
 	if nodeStmtsLength > maxStmtsLength {
 		maxStmtsLength = nodeStmtsLength
 	}
-	x := len(n.fullPath)
-	if x > fullPathMaxLen {
-		fullPathMaxLen = x
+	fullPathLen := len(n.fullPath)
+	if fullPathLen > fullPathMaxLen {
+		fullPathMaxLen = fullPathLen
 	}
 	return Stats{
 		All:            all,
@@ -127,8 +127,8 @@ func getColor(percent float64) (string, string) {
 	return color, noColorValue
 }
 
-func (n *Node) Render(w io.Writer, config *Config, indent int, fileMaxLen int, stmtsMaxLen int, fullPathMaxLen int, args []string) {
-	if config.Depth != 0 && indent > config.Depth {
+func (n *Node) Render(w io.Writer, config *Config, stats Stats, args []string) {
+	if config.Depth != 0 && n.level > config.Depth {
 		return
 	}
 	var filterBySelectedPath bool
@@ -148,11 +148,11 @@ func (n *Node) Render(w io.Writer, config *Config, indent int, fileMaxLen int, s
 		color = ""
 		noColorValue = ""
 	}
-	stmtsPadding := stmtsMaxLen - digitsCount(n.allStatements) - digitsCount(n.covered)
+	stmtsPadding := stats.StmtsMaxLen - digitsCount(n.allStatements) - digitsCount(n.covered)
 	if !filterBySelectedPath || found || n.level == 0 {
 		_, _ = fmt.Fprintf(w,
 			"|%s%s %s%s %s| %s%s%d/%d%s | %s%7.2f%%%s | %s%s%s |",
-			color, strings.Repeat("  ", indent), n.path, padPath(fileMaxLen, n.path, indent), noColorValue,
+			color, strings.Repeat("  ", n.level), n.path, padPath(stats.FileMaxLen, n.path, n.level), noColorValue,
 			color, strings.Repeat(" ", stmtsPadding), n.covered, n.allStatements, noColorValue,
 			color, percent, noColorValue,
 			color, strings.Repeat(percentFillSymbol, progressbar(percent))+strings.Repeat(percentEmptySymbol, 10-progressbar(percent)), noColorValue,
@@ -160,7 +160,7 @@ func (n *Node) Render(w io.Writer, config *Config, indent int, fileMaxLen int, s
 		if config.WithFullPath {
 			_, _ = fmt.Fprintf(w,
 				" %s%-*s%s |",
-				color, fullPathMaxLen, n.fullPath, noColorValue,
+				color, stats.FullPathMaxLen, n.fullPath, noColorValue,
 			)
 		}
 		_, _ = fmt.Fprintf(w, "\n")
@@ -172,7 +172,7 @@ func (n *Node) Render(w io.Writer, config *Config, indent int, fileMaxLen int, s
 	sort.Strings(sortOrder)
 	for _, k := range sortOrder {
 		c := n.children[k]
-		c.Render(w, config, indent+1, fileMaxLen, stmtsMaxLen, fullPathMaxLen, args)
+		c.Render(w, config, stats, args)
 	}
 }
 

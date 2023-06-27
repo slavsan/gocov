@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	depthFlagDesc   = "report on files and directories of certain depth"
-	noColorFlagDesc = "disable color output"
+	depthFlagDesc    = "report on files and directories of certain depth"
+	noColorFlagDesc  = "disable color output"
+	withFullPathDesc = "include the full path column in the output"
 )
 
 func Exec() {
@@ -23,8 +24,9 @@ func Exec() {
 		config  = &internal.Config{
 			Color: true,
 		}
-		reportDepth int
-		noColor     bool
+		reportDepth  int
+		noColor      bool
+		withFullPath bool
 
 		reportCmd = flag.NewFlagSet("report", flag.ExitOnError)
 	)
@@ -32,6 +34,7 @@ func Exec() {
 	reportCmd.IntVar(&reportDepth, "depth", 0, depthFlagDesc)
 	reportCmd.IntVar(&reportDepth, "d", 0, depthFlagDesc)
 	reportCmd.BoolVar(&noColor, "no-color", false, noColorFlagDesc)
+	reportCmd.BoolVar(&withFullPath, "with-full-path", false, noColorFlagDesc)
 
 	reportCmd.Usage = func() {
 		_, _ = fmt.Fprintf(
@@ -41,9 +44,11 @@ func Exec() {
 				`      %s`,
 				`  --no-color`,
 				`      %s`,
+				`  --with-full-path`,
+				`      %s`,
 				``,
 			}, "\n"),
-			depthFlagDesc, noColorFlagDesc,
+			depthFlagDesc, noColorFlagDesc, withFullPathDesc,
 		)
 	}
 
@@ -66,6 +71,7 @@ func Exec() {
 		}
 		config.Depth = reportDepth
 		config.Color = !noColor
+		config.WithFullPath = withFullPath
 		args = reportCmd.Args()
 	case "test":
 		command = internal.Test
