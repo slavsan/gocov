@@ -24,21 +24,21 @@ func NewTree(w io.Writer) *Tree {
 	}
 }
 
-func (t *Tree) Render(config *Config, fileMaxLen, stmtsMaxLen, fullPathMaxLen int, args []string) {
+func (t *Tree) Render(config *Config, stats Stats, args []string) {
 	w := t.writer
-	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|-%s|", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8), strings.Repeat("-", 11))
+	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|-%s|", strings.Repeat("-", stats.FileMaxLen), strings.Repeat("-", stats.StmtsMaxLen+1), strings.Repeat("-", 8), strings.Repeat("-", 11))
 	if config.WithFullPath {
-		_, _ = fmt.Fprintf(w, "-%s-|", strings.Repeat("-", fullPathMaxLen))
+		_, _ = fmt.Fprintf(w, "-%s-|", strings.Repeat("-", stats.FullPathMaxLen))
 	}
 	_, _ = fmt.Fprintf(w, "\n")
-	_, _ = fmt.Fprintf(w, "| %-*s | %*s | %*s | %-*s |", fileMaxLen, "File", stmtsMaxLen+1, "Stmts", 8, "% Stmts", 10, "Progress")
+	_, _ = fmt.Fprintf(w, "| %-*s | %*s | %*s | %-*s |", stats.FileMaxLen, "File", stats.StmtsMaxLen+1, "Stmts", 8, "% Stmts", 10, "Progress")
 	if config.WithFullPath {
-		_, _ = fmt.Fprintf(w, " %-*s |", fullPathMaxLen, "Full path")
+		_, _ = fmt.Fprintf(w, " %-*s |", stats.FullPathMaxLen, "Full path")
 	}
 	_, _ = fmt.Fprintf(w, "\n")
-	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|-%s-|", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8), strings.Repeat("-", 10))
+	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|-%s-|", strings.Repeat("-", stats.FileMaxLen), strings.Repeat("-", stats.StmtsMaxLen+1), strings.Repeat("-", 8), strings.Repeat("-", 10))
 	if config.WithFullPath {
-		_, _ = fmt.Fprintf(w, "-%s-|", strings.Repeat("-", fullPathMaxLen))
+		_, _ = fmt.Fprintf(w, "-%s-|", strings.Repeat("-", stats.FullPathMaxLen))
 	}
 	_, _ = fmt.Fprintf(w, "\n")
 
@@ -50,43 +50,47 @@ func (t *Tree) Render(config *Config, fileMaxLen, stmtsMaxLen, fullPathMaxLen in
 
 	for _, k := range sortOrder {
 		c := t.Root.children[k]
-		c.Render(w, config, 0, fileMaxLen, stmtsMaxLen, fullPathMaxLen, args)
+		c.Render(w, config, 0, stats.FileMaxLen, stats.StmtsMaxLen, stats.FullPathMaxLen, args)
 	}
-	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|-%s-|", strings.Repeat("-", fileMaxLen), strings.Repeat("-", stmtsMaxLen+1), strings.Repeat("-", 8), strings.Repeat("-", 10))
+	_, _ = fmt.Fprintf(w, "|-%s-|-%s-|-%s-|-%s-|", strings.Repeat("-", stats.FileMaxLen), strings.Repeat("-", stats.StmtsMaxLen+1), strings.Repeat("-", 8), strings.Repeat("-", 10))
 	if config.WithFullPath {
-		_, _ = fmt.Fprintf(w, "-%s-|", strings.Repeat("-", fullPathMaxLen))
+		_, _ = fmt.Fprintf(w, "-%s-|", strings.Repeat("-", stats.FullPathMaxLen))
 	}
 	_, _ = fmt.Fprintf(w, "\n")
 
-	//fmt.Printf("/full/path/to/gocov/go.mod:1\n")
-	//fmt.Printf("gocov/go.mod:1\n")
+	// fmt.Printf("/full/path/to/gocov/go.mod:1\n")
+	// fmt.Printf("gocov/go.mod:1\n")
 }
 
-func (t *Tree) Accumulate() (int, int, int) {
-	var fileMaxLen int
-	var stmtsMaxLen int
-	var fullPathMaxLen int
-	_, _, fileMaxLen, stmtsMaxLen, fullPathMaxLen = t.Root.Accumulate(0)
-	return fileMaxLen, stmtsMaxLen, fullPathMaxLen
+type Stats struct {
+	All            int
+	Covered        int
+	FileMaxLen     int
+	StmtsMaxLen    int
+	FullPathMaxLen int
 }
 
-func (n *Node) Accumulate(indent int) (int, int, int, int, int) {
+func (t *Tree) Accumulate() Stats {
+	return t.Root.Accumulate(0)
+}
+
+func (n *Node) Accumulate(indent int) Stats {
 	var all, covered, maxPathLength, maxStmtsLength, fullPathMaxLen int
 	if n.value != nil {
 		all = n.value.AllStatements
 		covered = n.value.Covered
 	}
 	for _, cn := range n.children {
-		a, c, fileMaxLen, stmtsMaxLen, fullPathMaxLen2 := cn.Accumulate(indent + 1)
-		all, covered = all+a, covered+c
-		if fileMaxLen > maxPathLength {
-			maxPathLength = fileMaxLen
+		stats := cn.Accumulate(indent + 1)
+		all, covered = all+stats.All, covered+stats.Covered
+		if stats.FileMaxLen > maxPathLength {
+			maxPathLength = stats.FileMaxLen
 		}
-		if stmtsMaxLen > maxStmtsLength {
-			maxStmtsLength = stmtsMaxLen
+		if stats.StmtsMaxLen > maxStmtsLength {
+			maxStmtsLength = stats.StmtsMaxLen
 		}
-		if fullPathMaxLen2 > fullPathMaxLen {
-			fullPathMaxLen = fullPathMaxLen2
+		if stats.FullPathMaxLen > fullPathMaxLen {
+			fullPathMaxLen = stats.FullPathMaxLen
 		}
 	}
 	n.allStatements = all
@@ -103,7 +107,24 @@ func (n *Node) Accumulate(indent int) (int, int, int, int, int) {
 	if x > fullPathMaxLen {
 		fullPathMaxLen = x
 	}
-	return all, covered, maxPathLength, maxStmtsLength, fullPathMaxLen
+	return Stats{
+		All:            all,
+		Covered:        covered,
+		FileMaxLen:     maxPathLength,
+		StmtsMaxLen:    maxStmtsLength,
+		FullPathMaxLen: fullPathMaxLen,
+	}
+}
+
+func getColor(percent float64) (string, string) {
+	color := Red
+	noColorValue := NoColor
+	if percent >= 80 {
+		color = Green
+	} else if percent >= 50 {
+		color = Yellow
+	}
+	return color, noColorValue
 }
 
 func (n *Node) Render(w io.Writer, config *Config, indent int, fileMaxLen int, stmtsMaxLen int, fullPathMaxLen int, args []string) {
@@ -122,13 +143,7 @@ func (n *Node) Render(w io.Writer, config *Config, indent int, fileMaxLen int, s
 	}
 
 	percent := getPercent(n)
-	color := Red
-	noColorValue := NoColor
-	if percent >= 80 {
-		color = Green
-	} else if percent >= 50 {
-		color = Yellow
-	}
+	color, noColorValue := getColor(percent)
 	if !config.Color {
 		color = ""
 		noColorValue = ""
@@ -176,13 +191,13 @@ func (n *Node) Add(path string, fullPath string, value *covFile, level int) {
 
 	if index < 0 {
 		if _, ok := n.children[path]; !ok {
-			n.children[path] = &Node{level: level, path: path, fullPath: foobar(fullPath, level), value: value, children: map[string]*Node{}}
+			n.children[path] = &Node{level: level, path: path, fullPath: getFullPath(fullPath, level), value: value, children: map[string]*Node{}}
 		}
 		return
 	}
 
 	if _, ok := n.children[path[:index]]; !ok {
-		n.children[path[:index]] = &Node{level: level, path: path[:index], fullPath: foobar(fullPath, level), children: map[string]*Node{}}
+		n.children[path[:index]] = &Node{level: level, path: path[:index], fullPath: getFullPath(fullPath, level), children: map[string]*Node{}}
 	}
 	n.children[path[:index]].Add(path[index+1:], fullPath, value, level+1)
 }
@@ -191,7 +206,7 @@ func progressbar(percent float64) int {
 	return int(percent / 10)
 }
 
-func foobar(path string, level int) string {
+func getFullPath(path string, level int) string {
 	parts := strings.Split(path, "/")
 	return strings.Join(parts[:level+1], "/")
 }

@@ -227,7 +227,7 @@ func (cmd *Cmd) Exec(command Command, args []string) {
 		cmd.exiter.Exit(1)
 		return
 	}
-	fileMaxLen, stmtsMaxLen, fullPathMaxLen := tree.Accumulate()
+	stats := tree.Accumulate()
 
 	if command == Inspect {
 		cmd.Inspect(args, files, moduleDir)
@@ -235,7 +235,7 @@ func (cmd *Cmd) Exec(command Command, args []string) {
 	}
 
 	if command == Report {
-		cmd.Report(tree, cmd.config, fileMaxLen, stmtsMaxLen, fullPathMaxLen, args)
+		cmd.Report(tree, cmd.config, stats, args)
 		return
 	}
 

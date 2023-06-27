@@ -318,7 +318,7 @@ github.com/slavsan/gospec/gospec.go:224.43,230.2 1 225
 github.com/slavsan/gospec/gospec.go:232.49,239.2 1 426
 `
 
-func TestStdoutReport(t *testing.T) {
+func TestStdoutReport(t *testing.T) { //nolint:maintidx
 	testCases := []struct {
 		title            string
 		fsys             fs.StatFS
