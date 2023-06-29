@@ -1,10 +1,15 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/slavsan/gocov/internal"
@@ -22,7 +27,8 @@ func Exec() { //nolint:funlen
 		command internal.Command
 		args    []string
 		config  = &internal.Config{
-			Color: true,
+			Color:  true,
+			Global: loadGlobalConf(),
 		}
 		reportDepth  int
 		noColor      bool
@@ -106,4 +112,48 @@ help		- show this help message
 
 func printUsage() {
 	_, _ = fmt.Fprint(os.Stdout, usage)
+}
+
+func loadGlobalConf() *internal.GocovConfig {
+	homedir, err := os.UserHomeDir()
+	if err != nil {
+		// TODO: in debug mode, show the error
+		return nil
+	}
+
+	pathToFile := path.Join(homedir, ".gocov")
+	if _, err := os.Stat(pathToFile); errors.Is(err, os.ErrNotExist) {
+		// TODO: in debug mode, show the error
+		return nil
+	}
+
+	f, err := os.Open(pathToFile)
+	if err != nil {
+		// TODO: in debug mode, show the error
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+
+	var buf bytes.Buffer
+	tee := io.TeeReader(f, &buf)
+
+	b, err := io.ReadAll(tee)
+	if err != nil {
+		// TODO: in debug mode, show the error
+		return nil
+	}
+
+	var conf *internal.GocovConfig
+
+	err = json.Unmarshal(b, &conf)
+	if err != nil {
+		// TODO: in debug mode, show the error
+		return nil
+	}
+
+	if conf != nil {
+		conf.Contents = buf.Bytes()
+	}
+
+	return conf
 }

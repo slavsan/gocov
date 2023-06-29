@@ -39,8 +39,9 @@ const (
 type Config struct {
 	Color        bool
 	Depth        int
-	File         *GocovConfig
 	WithFullPath bool
+	File         *GocovConfig
+	Global       *GocovConfig
 }
 
 type GocovConfig struct {
