@@ -71,7 +71,11 @@ type Stats struct {
 }
 
 func (t *Tree) Accumulate() Stats {
-	return t.Root.Accumulate()
+	stats := t.Root.Accumulate()
+	if stats.StmtsMaxLen < 5 {
+		stats.StmtsMaxLen = 5
+	}
+	return stats
 }
 
 func (n *Node) Accumulate() Stats {

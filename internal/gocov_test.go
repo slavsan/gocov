@@ -404,6 +404,28 @@ func TestStdoutReport(t *testing.T) { //nolint:maintidx
 			expectedExitCode: 0,
 		},
 		{
+			title: "with smaller example coverage.out file and stdout report",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gocov`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut3)},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout: strings.Join([]string{
+				`|--------------|--------|----------|------------|`,
+				`| File         |  Stmts |  % Stmts | Progress   |`,
+				`|--------------|--------|----------|------------|`,
+				`| gocov        |   0/11 |    0.00% |            |`,
+				`|   cmd        |   0/11 |    0.00% |            |`,
+				`|     gocov.go |   0/11 |    0.00% |            |`,
+				`|--------------|--------|----------|------------|`,
+				``,
+			}, "\n"),
+			expectedStderr:   "",
+			expectedExitCode: 0,
+		},
+		{
 			title: "with .gocov file specifying one file to ignore",
 			fsys: fstest.MapFS{
 				"go.mod":       {Data: []byte(`module github.com/slavsan/gocov`)},
