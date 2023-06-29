@@ -40,6 +40,7 @@ type Config struct {
 	Color        bool
 	Depth        int
 	WithFullPath bool
+	ExactPath    bool
 	File         *GocovConfig
 	Global       *GocovConfig
 }

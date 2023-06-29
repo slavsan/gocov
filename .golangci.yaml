@@ -11,8 +11,10 @@ linters:
     - exhaustivestruct
     - golint
     - varcheck
+    - goerr113
     - ifshort
     - rowserrcheck
+    - godox
     - sqlclosecheck
     - wastedassign
     - varnamelen

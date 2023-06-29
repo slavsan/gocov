@@ -16,9 +16,12 @@ import (
 )
 
 const (
+	// report flags.
 	depthFlagDesc    = "report on files and directories of certain depth"
 	noColorFlagDesc  = "disable color output"
 	withFullPathDesc = "include the full path column in the output"
+	// inspect flags.
+	exactFlagDesc = "specify exact path to file"
 )
 
 func Exec() { //nolint:funlen
@@ -33,14 +36,18 @@ func Exec() { //nolint:funlen
 		reportDepth  int
 		noColor      bool
 		withFullPath bool
+		exactPath    bool
 
-		reportCmd = flag.NewFlagSet("report", flag.ExitOnError)
+		reportCmd  = flag.NewFlagSet("report", flag.ExitOnError)
+		inspectCmd = flag.NewFlagSet("inspect", flag.ExitOnError)
 	)
 
 	reportCmd.IntVar(&reportDepth, "depth", 0, depthFlagDesc)
 	reportCmd.IntVar(&reportDepth, "d", 0, depthFlagDesc)
 	reportCmd.BoolVar(&noColor, "no-color", false, noColorFlagDesc)
 	reportCmd.BoolVar(&withFullPath, "with-full-path", false, noColorFlagDesc)
+
+	inspectCmd.BoolVar(&exactPath, "exact", false, noColorFlagDesc)
 
 	reportCmd.Usage = func() {
 		_, _ = fmt.Fprintf(
@@ -55,6 +62,18 @@ func Exec() { //nolint:funlen
 				``,
 			}, "\n"),
 			depthFlagDesc, noColorFlagDesc, withFullPathDesc,
+		)
+	}
+
+	inspectCmd.Usage = func() {
+		_, _ = fmt.Fprintf(
+			os.Stdout, strings.Join([]string{
+				`Usage of inspect:`,
+				`  --exact`,
+				`      %s`,
+				``,
+			}, "\n"),
+			exactFlagDesc,
 		)
 	}
 
@@ -87,9 +106,14 @@ func Exec() { //nolint:funlen
 		command = internal.Check
 	case "inspect":
 		command = internal.Inspect
-		if len(os.Args) > 2 {
-			args = append(args, os.Args[2])
+		err = inspectCmd.Parse(os.Args[2:])
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "failed to parse args: %s", err.Error())
+			printUsage()
+			os.Exit(1)
 		}
+		config.ExactPath = exactPath
+		args = inspectCmd.Args()
 	default:
 		printUsage()
 		return
