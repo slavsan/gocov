@@ -51,7 +51,7 @@ type GocovConfig struct {
 	Contents  []byte
 }
 
-type covReportLine struct {
+type covReport struct {
 	StartLine       int
 	StartColumn     int
 	EndLine         int
@@ -66,7 +66,7 @@ type covFile struct {
 	AllStatements int
 	Percent       float64
 	Covered       int
-	Lines         []*covReportLine
+	Reports       []*covReport
 }
 
 type Exiter interface {
@@ -141,7 +141,7 @@ func (cmd *Cmd) parseCoverageFile(moduleDir string) (*Tree, map[string]*covFile,
 		all         int64
 		covered     int64
 		files       = map[string]*covFile{}
-		covLine     *covReportLine
+		covLine     *covReport
 	)
 
 	f, err = cmd.fsys.Open("coverage.out")
@@ -170,7 +170,7 @@ func (cmd *Cmd) parseCoverageFile(moduleDir string) (*Tree, map[string]*covFile,
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to parse coverage file on line %d", currentLine) //nolint:goerr113
 		}
-		files[name].Lines = append(files[name].Lines, covLine)
+		files[name].Reports = append(files[name].Reports, covLine)
 
 		files[name].AllStatements += covLine.StatementsCount
 		if covLine.Hits > 0 {
@@ -179,18 +179,18 @@ func (cmd *Cmd) parseCoverageFile(moduleDir string) (*Tree, map[string]*covFile,
 		files[name].Percent = float64(files[name].Covered) * 100 / float64(files[name].AllStatements)
 	}
 
-	for _, f := range files {
-		all += int64(f.AllStatements)
-		covered += int64(f.Covered)
-		f.Path = strings.TrimPrefix(f.Name, moduleDir+"/")
+	for _, file := range files {
+		all += int64(file.AllStatements)
+		covered += int64(file.Covered)
+		file.Path = strings.TrimPrefix(file.Name, moduleDir+"/")
 	}
 
 	tree := NewTree(cmd.stdout)
-	for _, v := range files {
-		if isIgnored(v, cmd.config.File) {
+	for _, file := range files {
+		if isIgnored(file, cmd.config.File) {
 			continue
 		}
-		tree.Add(v.Path, v)
+		tree.Add(file.Path, file)
 	}
 
 	return tree, files, nil
@@ -286,9 +286,9 @@ func getModule(fsys fs.StatFS) (string, error) {
 	return strings.TrimPrefix(line, "module "), nil
 }
 
-func parseLine(line string) (*covReportLine, error) {
+func parseLine(line string) (*covReport, error) {
 	var (
-		covLine   = &covReportLine{}
+		report    = &covReport{}
 		prevIndex = -1
 		column    int
 	)
@@ -304,22 +304,22 @@ func parseLine(line string) (*covReportLine, error) {
 
 		switch column {
 		case 0:
-			covLine.StartLine = value
+			report.StartLine = value
 		case 1:
-			covLine.StartColumn = value
+			report.StartColumn = value
 		case 2:
-			covLine.EndLine = value
+			report.EndLine = value
 		case 3:
-			covLine.EndColumn = value
+			report.EndColumn = value
 		case 4:
-			covLine.StatementsCount = value
+			report.StatementsCount = value
 		case 5:
-			covLine.Hits = value
+			report.Hits = value
 		}
 
 		column++
 	}
-	return covLine, nil
+	return report, nil
 }
 
 func digitsCount(num int) int {

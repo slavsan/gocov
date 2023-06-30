@@ -52,7 +52,7 @@ func (cmd *Cmd) findPartialMatchFile(args []string, files map[string]*covFile, m
 	} else {
 		targetFile = relPath[index+1:]
 	}
-	file, ok := files[sorted[0]]
+	file, ok := files[firstMatch]
 	if !ok {
 		return nil, "", 0, fmt.Errorf("failed to open %s", firstMatch)
 	}
@@ -98,25 +98,11 @@ func (cmd *Cmd) Inspect(args []string, files map[string]*covFile, moduleDir stri
 		return
 	}
 
-	lines := strings.Split(string(data), "\n")
-
-	sort.Slice(file.Lines, func(i, j int) bool {
-		if file.Lines[i].EndLine == file.Lines[j].EndLine {
-			return file.Lines[i].StartColumn > file.Lines[j].StartColumn
-		}
-		return file.Lines[i].EndLine > file.Lines[j].EndLine
-	})
-
-	for _, x := range file.Lines {
-		if x.Hits > 0 {
-			continue
-		}
-
-		lineNum := x.EndLine - 1
-		lines[lineNum] = lines[lineNum][:x.EndColumn-1] + NoColor + lines[lineNum][x.EndColumn-1:]
-
-		lineNum = x.StartLine - 1
-		lines[lineNum] = lines[lineNum][:x.StartColumn-1] + Red + lines[lineNum][x.StartColumn-1:]
+	lines, err := cmd.getColorizedLines(data, file)
+	if err != nil {
+		_, _ = fmt.Fprint(cmd.stderr, err.Error())
+		cmd.exiter.Exit(1)
+		return
 	}
 
 	width := digitsCount(len(lines) - 1)
@@ -129,4 +115,47 @@ func (cmd *Cmd) Inspect(args []string, files map[string]*covFile, moduleDir stri
 	if !cmd.config.ExactPath && skipped > 0 {
 		_, _ = fmt.Fprintf(cmd.stdout, "skipped %d other files which matched\n", skipped)
 	}
+}
+
+func (cmd *Cmd) getColorizedLines(data []byte, file *covFile) ([]string, error) {
+	lines := strings.Split(string(data), "\n")
+
+	sort.Slice(file.Reports, func(i, j int) bool {
+		if file.Reports[i].EndLine == file.Reports[j].EndLine {
+			return file.Reports[i].StartColumn > file.Reports[j].StartColumn
+		}
+		return file.Reports[i].EndLine > file.Reports[j].EndLine
+	})
+
+	for _, report := range file.Reports {
+		if report.Hits > 0 {
+			continue
+		}
+
+		lineNum := report.EndLine - 1
+
+		if len(lines) < lineNum+1 {
+			return nil, errors.New("running inspect failed, please regenerate the coverage report again")
+		}
+
+		if len(lines[lineNum]) < report.EndColumn-1 {
+			return nil, errors.New("running inspect failed, please regenerate the coverage report again")
+		}
+
+		lines[lineNum] = lines[lineNum][:report.EndColumn-1] + NoColor + lines[lineNum][report.EndColumn-1:]
+
+		lineNum = report.StartLine - 1
+
+		if len(lines) < lineNum+1 {
+			return nil, errors.New("running inspect failed, please regenerate the coverage report again")
+		}
+
+		if len(lines[lineNum]) < report.StartColumn-1 {
+			return nil, errors.New("running inspect failed, please regenerate the coverage report again")
+		}
+
+		lines[lineNum] = lines[lineNum][:report.StartColumn-1] + Red + lines[lineNum][report.StartColumn-1:]
+	}
+
+	return lines, nil
 }

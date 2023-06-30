@@ -824,7 +824,7 @@ func TestConfigFile(t *testing.T) {
 	}
 }
 
-func TestInspect(t *testing.T) {
+func TestInspect(t *testing.T) { //nolint:maintidx
 	testCases := []struct {
 		title            string
 		fsys             fs.StatFS
@@ -1058,6 +1058,145 @@ func TestInspect(t *testing.T) {
 			}, "\n"),
 			expectedStderr:   "",
 			expectedExitCode: 0,
+		},
+		{
+			title: "when the coverage.out file is out of date, end line is out of bound",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut3)},
+				"cmd/gocov.go": {Data: []byte(strings.Join([]string{
+					`package cmd`,
+					``,
+					`import (`,
+					`	"os"`,
+					``,
+					`	"github.com/slavsan/gocov/internal"`,
+					`)`,
+					``,
+					`func Exec() {`,
+					`	var args []string`,
+					`	config := &internal.Config{}`,
+					`	config.Color = true`,
+					``,
+					`	command := internal.Report`,
+					``,
+					`	if len(os.Args) > 1 {`,
+					`		switch os.Args[1] {`,
+					`		case "check":`,
+					`			command = internal.Check`,
+					`		}`,
+					`	}`,
+					``,
+					`	internal.Exec(`,
+					`		command,`,
+					`		args,`,
+					`		os.Stdout,`,
+					`		os.Stderr,`,
+					`		os.DirFS("."),`,
+					`		config,`,
+					`		&internal.ProcessExiter{},`,
+					`	)`,
+					`}`,
+					``,
+				}, "\n"))},
+			},
+			args: []string{"cmd/gocov.go"},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "running inspect failed, please regenerate the coverage report again",
+			expectedExitCode: 1,
+		},
+		{
+			title: "when the coverage.out file is out of date, end column is out of bound",
+			fsys: fstest.MapFS{
+				"go.mod": {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(strings.Join([]string{
+					`mode: atomic`,
+					`github.com/slavsan/gocov/cmd/gocov.go:1.13,2.22 5 0`,
+					``,
+				}, "\n"))},
+				"cmd/gocov.go": {Data: []byte(strings.Join([]string{
+					`package main`,
+					``,
+					`import (`,
+					`	os`,
+					`)`,
+					``,
+					`func Exec() {`,
+					`	fmt.Printf("foobar\n")`,
+					`}`,
+					``,
+				}, "\n"))},
+			},
+			args: []string{"cmd/gocov.go"},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "running inspect failed, please regenerate the coverage report again",
+			expectedExitCode: 1,
+		},
+		{
+			title: "when the coverage.out file is out of date, start line is out of bound",
+			fsys: fstest.MapFS{
+				"go.mod": {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(strings.Join([]string{
+					`mode: atomic`,
+					`github.com/slavsan/gocov/cmd/gocov.go:20.1,1.1 5 0`,
+					``,
+				}, "\n"))},
+				"cmd/gocov.go": {Data: []byte(strings.Join([]string{
+					`package main`,
+					``,
+					`import (`,
+					`	os`,
+					`)`,
+					``,
+					`func Exec() {`,
+					`	fmt.Printf("foobar\n")`,
+					`}`,
+					``,
+				}, "\n"))},
+			},
+			args: []string{"cmd/gocov.go"},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "running inspect failed, please regenerate the coverage report again",
+			expectedExitCode: 1,
+		},
+		{
+			title: "when the coverage.out file is out of date, start column is out of bound",
+			fsys: fstest.MapFS{
+				"go.mod": {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(strings.Join([]string{
+					`mode: atomic`,
+					`github.com/slavsan/gocov/cmd/gocov.go:2.20,1.1 5 0`,
+					``,
+				}, "\n"))},
+				"cmd/gocov.go": {Data: []byte(strings.Join([]string{
+					`package main`,
+					``,
+					`import (`,
+					`	os`,
+					`)`,
+					``,
+					`func Exec() {`,
+					`	fmt.Printf("foobar\n")`,
+					`}`,
+					``,
+				}, "\n"))},
+			},
+			args: []string{"cmd/gocov.go"},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "running inspect failed, please regenerate the coverage report again",
+			expectedExitCode: 1,
 		},
 	}
 
