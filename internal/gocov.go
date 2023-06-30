@@ -41,8 +41,26 @@ type Config struct {
 	Depth        int
 	WithFullPath bool
 	ExactPath    bool
+	Threshold    float64
 	File         *GocovConfig
 	Global       *GocovConfig
+}
+
+func (c *Config) Update() {
+	c.updateThreshold()
+}
+
+func (c *Config) updateThreshold() {
+	if c.Threshold != 0 {
+		return
+	}
+	if c.File != nil && c.File.Threshold != 0 {
+		c.Threshold = c.File.Threshold
+		return
+	}
+	if c.Global != nil && c.Global.Threshold != 0 {
+		c.Threshold = c.Global.Threshold
+	}
 }
 
 type GocovConfig struct {
@@ -208,6 +226,8 @@ func (cmd *Cmd) Exec(command Command, args []string) {
 		cmd.exiter.Exit(1)
 		return
 	}
+
+	cmd.config.Update()
 
 	if command == ConfigFile {
 		cmd.Config()

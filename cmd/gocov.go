@@ -22,6 +22,8 @@ const (
 	withFullPathDesc = "include the full path column in the output"
 	// inspect flags.
 	exactFlagDesc = "specify exact path to file"
+	// check flags.
+	thresholdFlagDesc = "specify the desired coverage threshold"
 )
 
 func Exec() { //nolint:funlen
@@ -37,8 +39,10 @@ func Exec() { //nolint:funlen
 		noColor      bool
 		withFullPath bool
 		exactPath    bool
+		threshold    float64
 
 		reportCmd  = flag.NewFlagSet("report", flag.ExitOnError)
+		checkCmd   = flag.NewFlagSet("check", flag.ExitOnError)
 		inspectCmd = flag.NewFlagSet("inspect", flag.ExitOnError)
 	)
 
@@ -46,6 +50,8 @@ func Exec() { //nolint:funlen
 	reportCmd.IntVar(&reportDepth, "d", 0, depthFlagDesc)
 	reportCmd.BoolVar(&noColor, "no-color", false, noColorFlagDesc)
 	reportCmd.BoolVar(&withFullPath, "with-full-path", false, noColorFlagDesc)
+
+	checkCmd.Float64Var(&threshold, "threshold", 0, thresholdFlagDesc)
 
 	inspectCmd.BoolVar(&exactPath, "exact", false, noColorFlagDesc)
 
@@ -77,6 +83,18 @@ func Exec() { //nolint:funlen
 		)
 	}
 
+	checkCmd.Usage = func() {
+		_, _ = fmt.Fprintf(
+			os.Stdout, strings.Join([]string{
+				`Usage of check:`,
+				`  --threshold int`,
+				`      %s`,
+				``,
+			}, "\n"),
+			thresholdFlagDesc,
+		)
+	}
+
 	if len(os.Args) == 1 {
 		printUsage()
 		return
@@ -104,6 +122,14 @@ func Exec() { //nolint:funlen
 		command = internal.ConfigFile
 	case "check":
 		command = internal.Check
+		err = checkCmd.Parse(os.Args[2:])
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "failed to parse args: %s", err.Error())
+			printUsage()
+			os.Exit(1)
+		}
+		config.Threshold = threshold
+		args = checkCmd.Args()
 	case "inspect":
 		command = internal.Inspect
 		err = inspectCmd.Parse(os.Args[2:])

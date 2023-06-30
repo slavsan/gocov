@@ -1,8 +1,6 @@
 package internal
 
-import (
-	"fmt"
-)
+import "fmt"
 
 func (cmd *Cmd) Check(tree *Tree) {
 	actualCoveragePercent := float64(tree.Root.covered) * 100 / float64(tree.Root.allStatements)
@@ -11,8 +9,8 @@ func (cmd *Cmd) Check(tree *Tree) {
 		cmd.exiter.Exit(1)
 		return
 	}
-	if actualCoveragePercent < cmd.config.File.Threshold {
-		_, _ = fmt.Fprintf(cmd.stderr, "Coverage check failed: expected to have %.2f coverage, but got %.2f\n", cmd.config.File.Threshold, actualCoveragePercent)
+	if actualCoveragePercent < cmd.config.Threshold {
+		_, _ = fmt.Fprintf(cmd.stderr, "Coverage check failed: expected to have %.2f coverage, but got %.2f\n", cmd.config.Threshold, actualCoveragePercent)
 		cmd.exiter.Exit(1)
 	}
 }
