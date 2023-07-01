@@ -44,10 +44,14 @@ type Config struct {
 	Threshold    float64
 	File         *GocovConfig
 	Global       *GocovConfig
+	ReportFile   string
 }
 
 func (c *Config) Update() {
 	c.updateThreshold()
+	if c.ReportFile == "" {
+		c.ReportFile = "coverage.out"
+	}
 }
 
 func (c *Config) updateThreshold() {
@@ -162,9 +166,9 @@ func (cmd *Cmd) parseCoverageFile(moduleDir string) (*Tree, map[string]*covFile,
 		covLine     *covReport
 	)
 
-	f, err = cmd.fsys.Open("coverage.out")
+	f, err = cmd.fsys.Open(cmd.config.ReportFile)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open coverage.out: %w", err)
+		return nil, nil, fmt.Errorf("failed to open %s: %w", cmd.config.ReportFile, err)
 	}
 	defer func() { _ = f.Close() }()
 

@@ -17,9 +17,10 @@ import (
 
 const (
 	// report flags.
-	depthFlagDesc    = "report on files and directories of certain depth"
-	noColorFlagDesc  = "disable color output"
-	withFullPathDesc = "include the full path column in the output"
+	reportFileFlagDesc = "coverage profile file (default is coverage.out)"
+	depthFlagDesc      = "report on files and directories of certain depth"
+	noColorFlagDesc    = "disable color output"
+	withFullPathDesc   = "include the full path column in the output"
 	// inspect flags.
 	exactFlagDesc = "specify exact path to file"
 	// check flags.
@@ -35,6 +36,7 @@ func Exec() { //nolint:funlen
 			Color:  true,
 			Global: loadGlobalConf(),
 		}
+		reportFile   string
 		reportDepth  int
 		noColor      bool
 		withFullPath bool
@@ -46,6 +48,8 @@ func Exec() { //nolint:funlen
 		inspectCmd = flag.NewFlagSet("inspect", flag.ExitOnError)
 	)
 
+	reportCmd.StringVar(&reportFile, "file", "coverage.out", reportFileFlagDesc)
+	reportCmd.StringVar(&reportFile, "f", "coverage.out", reportFileFlagDesc)
 	reportCmd.IntVar(&reportDepth, "depth", 0, depthFlagDesc)
 	reportCmd.IntVar(&reportDepth, "d", 0, depthFlagDesc)
 	reportCmd.BoolVar(&noColor, "no-color", false, noColorFlagDesc)
@@ -59,6 +63,8 @@ func Exec() { //nolint:funlen
 		_, _ = fmt.Fprintf(
 			os.Stdout, strings.Join([]string{
 				`Usage of report:`,
+				`  -f, --file string`,
+				`      %s`,
 				`  -d, --depth int`,
 				`      %s`,
 				`  --no-color`,
@@ -67,7 +73,7 @@ func Exec() { //nolint:funlen
 				`      %s`,
 				``,
 			}, "\n"),
-			depthFlagDesc, noColorFlagDesc, withFullPathDesc,
+			reportFileFlagDesc, depthFlagDesc, noColorFlagDesc, withFullPathDesc,
 		)
 	}
 
@@ -115,6 +121,7 @@ func Exec() { //nolint:funlen
 		config.Depth = reportDepth
 		config.Color = !noColor
 		config.WithFullPath = withFullPath
+		config.ReportFile = reportFile
 		args = reportCmd.Args()
 	case "test":
 		command = internal.Test
