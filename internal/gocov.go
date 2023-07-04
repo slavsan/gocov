@@ -100,7 +100,12 @@ func reportKey(r *covReport) string {
 }
 
 func (f *covFile) add(report *covReport) {
-	f.reports[reportKey(report)] = report
+	key := reportKey(report)
+	if r, ok := f.reports[key]; ok {
+		r.Hits += report.Hits
+		return
+	}
+	f.reports[key] = report
 }
 
 func (f *covFile) calc() {

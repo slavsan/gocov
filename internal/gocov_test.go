@@ -11,6 +11,22 @@ import (
 	"github.com/slavsan/gocov/internal"
 )
 
+const exampleCoverageOut5 = `mode: set
+github.com/slavsan/gocov/cmd/gocov.go:9.13,16.22 5 0
+github.com/slavsan/gocov/cmd/gocov.go:29.2,37.3 1 0
+github.com/slavsan/gocov/cmd/gocov.go:16.22,17.21 1 1
+github.com/slavsan/gocov/cmd/gocov.go:18.16,19.28 1 1
+github.com/slavsan/gocov/cmd/gocov.go:20.18,22.24 2 0
+github.com/slavsan/gocov/cmd/gocov.go:22.24,24.5 1 0
+github.com/slavsan/gocov/internal/gocov.go:44.52,58.15 4 2
+github.com/slavsan/gocov/cmd/gocov.go:9.13,16.22 5 0
+github.com/slavsan/gocov/cmd/gocov.go:29.2,37.3 1 0
+github.com/slavsan/gocov/cmd/gocov.go:16.22,17.21 1 0
+github.com/slavsan/gocov/cmd/gocov.go:18.16,19.28 1 0
+github.com/slavsan/gocov/cmd/gocov.go:20.18,22.24 2 0
+github.com/slavsan/gocov/cmd/gocov.go:22.24,24.5 1 0
+`
+
 const exampleCoverageOut4 = `mode: set
 github.com/slavsan/gocov/cmd/gocov.go:9.13,16.22 5 0
 github.com/slavsan/gocov/cmd/gocov.go:29.2,37.3 1 0
@@ -644,6 +660,30 @@ func TestStdoutReport(t *testing.T) { //nolint:maintidx
 			fsys: fstest.MapFS{
 				"go.mod":       {Data: []byte(`module github.com/slavsan/gocov`)},
 				"coverage.out": {Data: []byte(exampleCoverageOut4)},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout: strings.Join([]string{
+				`|--------------|--------|----------|------------|`,
+				`| File         |  Stmts |  % Stmts | Progress   |`,
+				`|--------------|--------|----------|------------|`,
+				`| gocov        |   6/15 |   40.00% | ■■■■       |`,
+				`|   cmd        |   2/11 |   18.18% | ■          |`,
+				`|     gocov.go |   2/11 |   18.18% | ■          |`,
+				`|   internal   |    4/4 |  100.00% | ■■■■■■■■■■ |`,
+				`|     gocov.go |    4/4 |  100.00% | ■■■■■■■■■■ |`,
+				`|--------------|--------|----------|------------|`,
+				``,
+			}, "\n"),
+			expectedStderr:   "",
+			expectedExitCode: 0,
+		},
+		{
+			title: "with coverage report in set mode inverted",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gocov`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut5)},
 			},
 			config: &internal.Config{
 				Color: false,
