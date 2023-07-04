@@ -21,8 +21,8 @@ github.com/slavsan/gocov/cmd/gocov.go:22.24,24.5 1 0
 github.com/slavsan/gocov/internal/gocov.go:44.52,58.15 4 2
 github.com/slavsan/gocov/cmd/gocov.go:9.13,16.22 5 0
 github.com/slavsan/gocov/cmd/gocov.go:29.2,37.3 1 0
-github.com/slavsan/gocov/cmd/gocov.go:16.22,17.21 1 0
-github.com/slavsan/gocov/cmd/gocov.go:18.16,19.28 1 0
+github.com/slavsan/gocov/cmd/gocov.go:16.22,17.21 1 1
+github.com/slavsan/gocov/cmd/gocov.go:18.16,19.28 1 1
 github.com/slavsan/gocov/cmd/gocov.go:20.18,22.24 2 0
 github.com/slavsan/gocov/cmd/gocov.go:22.24,24.5 1 0
 `
@@ -652,9 +652,9 @@ func TestStdoutReport(t *testing.T) { //nolint:maintidx
 				`|--------------|--------|----------|------------|`,
 				`| File         |  Stmts |  % Stmts | Progress   |`,
 				`|--------------|--------|----------|------------|`,
-				`| gocov        |   4/15 |   26.67% | ■■         |`,
-				`|   cmd        |   0/11 |    0.00% |            |`,
-				`|     gocov.go |   0/11 |    0.00% |            |`,
+				`| gocov        |   6/15 |   40.00% | ■■■■       |`,
+				`|   cmd        |   2/11 |   18.18% | ■          |`,
+				`|     gocov.go |   2/11 |   18.18% | ■          |`,
 				`|   internal   |    4/4 |  100.00% | ■■■■■■■■■■ |`,
 				`|     gocov.go |    4/4 |  100.00% | ■■■■■■■■■■ |`,
 				`|--------------|--------|----------|------------|`,
