@@ -89,6 +89,35 @@ type covFile struct {
 	Percent       float64
 	Covered       int
 	Reports       []*covReport
+	reports       map[string]*covReport
+}
+
+func reportKey(r *covReport) string {
+	return fmt.Sprintf(
+		"%d:%d:%d:%d:%d",
+		r.StartLine, r.StartColumn, r.EndLine, r.EndColumn, r.StatementsCount,
+	)
+}
+
+func (f *covFile) add(report *covReport) {
+	key := reportKey(report)
+	if r, ok := f.reports[key]; ok {
+		r.Hits += report.Hits
+		return
+	}
+	f.reports[key] = report
+}
+
+func (f *covFile) calc() {
+	for _, report := range f.reports {
+		f.Reports = append(f.Reports, report)
+
+		f.AllStatements += report.StatementsCount
+		if report.Hits > 0 {
+			f.Covered += report.StatementsCount
+		}
+		f.Percent = float64(f.Covered) * 100 / float64(f.AllStatements)
+	}
 }
 
 type Exiter interface {
@@ -185,23 +214,19 @@ func (cmd *Cmd) parseCoverageFile(moduleDir string) (*Tree, map[string]*covFile,
 		name := line[:colonIndex]
 
 		if _, ok := files[name]; !ok {
-			files[name] = &covFile{Name: name}
+			files[name] = &covFile{Name: name, reports: map[string]*covReport{}}
 		}
 
 		covLine, err = parseLine(line[colonIndex+1:])
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to parse coverage file on line %d", currentLine) //nolint:goerr113
 		}
-		files[name].Reports = append(files[name].Reports, covLine)
 
-		files[name].AllStatements += covLine.StatementsCount
-		if covLine.Hits > 0 {
-			files[name].Covered += covLine.StatementsCount
-		}
-		files[name].Percent = float64(files[name].Covered) * 100 / float64(files[name].AllStatements)
+		files[name].add(covLine)
 	}
 
 	for _, file := range files {
+		file.calc()
 		all += int64(file.AllStatements)
 		covered += int64(file.Covered)
 		file.Path = strings.TrimPrefix(file.Name, moduleDir+"/")
