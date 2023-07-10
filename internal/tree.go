@@ -3,6 +3,7 @@ package internal
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"sort"
 	"strings"
 )
@@ -213,4 +214,82 @@ func progressbar(percent float64) int {
 func getFullPath(path string, level int) string {
 	parts := strings.Split(path, "/")
 	return strings.Join(parts[:level+1], "/")
+}
+
+func (t *Tree) RenderHTML(
+	cmd *Cmd,
+	sourceBuilder, objectBuilder io.Writer,
+	config *Config,
+	stats Stats,
+	args []string,
+	fsys fs.StatFS,
+	files map[string]*covFile,
+	moduleDir string,
+) {
+	sortOrder := make([]string, 0, len(t.Root.children))
+	for k := range t.Root.children {
+		sortOrder = append(sortOrder, k)
+	}
+	sort.Strings(sortOrder)
+	for _, k := range sortOrder {
+		c := t.Root.children[k]
+		c.RenderHTML(cmd, sourceBuilder, objectBuilder, config, stats, args, fsys, files, moduleDir)
+	}
+}
+
+func (n *Node) RenderHTML(
+	cmd *Cmd,
+	sourceBuilder, objectBuilder io.Writer,
+	config *Config,
+	stats Stats,
+	args []string,
+	fsys fs.StatFS,
+	files map[string]*covFile,
+	moduleDir string,
+) {
+	percent := getPercent(n)
+	pathToFile := getPath(n.fullPath)
+
+	if strings.HasSuffix(pathToFile, ".go") {
+		colorizedSourceFile, err := cmd.inspect([]string{n.fullPath}, files, moduleDir)
+		if err != nil {
+			_, _ = fmt.Fprintf(cmd.stderr, "failed to inspect file: %s", err.Error())
+			cmd.exiter.Exit(1)
+			return
+		}
+		escaped := escape(colorizedSourceFile)
+		_, _ = fmt.Fprintf(sourceBuilder, `<div class="source" id="%s"><pre>%s</pre></div>`+"\n", n.fullPath, escaped)
+	}
+
+	_, _ = fmt.Fprintf(objectBuilder, `{`)
+	_, _ = fmt.Fprintf(objectBuilder,
+		`"name":"%s","all":%d,"covered":%d,"percent":%.2f,"path":"%s","level":%d,`,
+		n.path, n.allStatements, n.covered, percent, n.fullPath, n.level,
+	)
+	if strings.HasSuffix(pathToFile, ".go") {
+		_, _ = fmt.Fprintf(objectBuilder, `"type":"file"}`)
+	} else {
+		_, _ = fmt.Fprintf(objectBuilder, `"type":"directory","children":[`)
+	}
+
+	sortOrder := make([]string, 0, len(n.children))
+	for k := range n.children {
+		sortOrder = append(sortOrder, k)
+	}
+	sort.Strings(sortOrder)
+	for i, k := range sortOrder {
+		if i != 0 {
+			_, _ = fmt.Fprintf(objectBuilder, ",")
+		}
+		c := n.children[k]
+		c.RenderHTML(cmd, sourceBuilder, objectBuilder, config, stats, args, fsys, files, moduleDir)
+	}
+	if !strings.HasSuffix(pathToFile, ".go") {
+		_, _ = fmt.Fprintf(objectBuilder, "]}")
+	}
+}
+
+func getPath(fullPath string) string {
+	parts := strings.Split(fullPath, "/")
+	return strings.Join(parts[1:], "/")
 }

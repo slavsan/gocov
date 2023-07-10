@@ -3,6 +3,7 @@ package internal_test
 
 import (
 	"bytes"
+	"io"
 	"io/fs"
 	"strings"
 	"testing"
@@ -711,7 +712,7 @@ func TestStdoutReport(t *testing.T) { //nolint:maintidx
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 			exiter := &exiterMock{}
-			internal.NewCommand(&stdout, &stderr, tc.fsys, tc.config, exiter).Exec(internal.Report, tc.args)
+			internal.NewCommand(&stdout, &stderr, tc.fsys, tc.config, exiter, &fileWriterMock{}).Exec(internal.Report, tc.args)
 			if tc.expectedStdout != stdout.String() {
 				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStdout, stdout.String())
 			}
@@ -816,7 +817,7 @@ func TestCheckCoverage(t *testing.T) {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 			exiter := &exiterMock{}
-			internal.NewCommand(&stdout, &stderr, tc.fsys, tc.config, exiter).Exec(internal.Check, []string{})
+			internal.NewCommand(&stdout, &stderr, tc.fsys, tc.config, exiter, &fileWriterMock{}).Exec(internal.Check, []string{})
 			if tc.expectedStdout != stdout.String() {
 				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStdout, stdout.String())
 			}
@@ -890,7 +891,7 @@ func TestConfigFile(t *testing.T) {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 			exiter := &exiterMock{}
-			internal.NewCommand(&stdout, &stderr, tc.fsys, tc.config, exiter).Exec(internal.ConfigFile, []string{})
+			internal.NewCommand(&stdout, &stderr, tc.fsys, tc.config, exiter, &fileWriterMock{}).Exec(internal.ConfigFile, []string{})
 			if tc.expectedStdout != stdout.String() {
 				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStdout, stdout.String())
 			}
@@ -1022,7 +1023,7 @@ func TestInspect(t *testing.T) { //nolint:maintidx
 			},
 			args:             []string{},
 			expectedStdout:   "",
-			expectedStderr:   "no arguments provided to inspect command\n",
+			expectedStderr:   "no arguments provided to inspect command",
 			expectedExitCode: 1,
 		},
 		{
@@ -1286,7 +1287,7 @@ func TestInspect(t *testing.T) { //nolint:maintidx
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 			exiter := &exiterMock{}
-			internal.NewCommand(&stdout, &stderr, tc.fsys, tc.config, exiter).Exec(internal.Inspect, tc.args)
+			internal.NewCommand(&stdout, &stderr, tc.fsys, tc.config, exiter, &fileWriterMock{}).Exec(internal.Inspect, tc.args)
 			if tc.expectedStdout != stdout.String() {
 				t.Errorf("table does not match\n\texpected:\n`%s`\n\tactual:\n`%s`\n", tc.expectedStdout, stdout.String())
 			}
@@ -1306,4 +1307,21 @@ type exiterMock struct {
 
 func (m *exiterMock) Exit(code int) {
 	m.code = code
+}
+
+type fileWriterMock struct {
+	f io.Writer
+}
+
+func (fw *fileWriterMock) Open(filepath string) error {
+	fw.f = &bytes.Buffer{}
+	return nil
+}
+
+func (fw *fileWriterMock) Write(b []byte) (int, error) {
+	return fw.f.Write(b)
+}
+
+func (fw *fileWriterMock) Close() error {
+	return nil
 }

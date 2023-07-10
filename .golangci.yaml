@@ -23,6 +23,8 @@ linters:
     - paralleltest
     - exhaustruct
     - gomnd
+    - forcetypeassert
+    - wrapcheck
 linters-settings:
   cyclop:
     max-complexity: 13

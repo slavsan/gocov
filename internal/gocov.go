@@ -45,6 +45,7 @@ type Config struct {
 	File         *GocovConfig
 	Global       *GocovConfig
 	ReportFile   string
+	HTMLOutput   bool
 }
 
 func (c *Config) Update() {
@@ -171,15 +172,17 @@ type Cmd struct {
 	fsys   fs.StatFS
 	config *Config
 	exiter Exiter
+	fw     FileWriterInterface
 }
 
-func NewCommand(stdout io.Writer, stderr io.Writer, fsys fs.StatFS, config *Config, exiter Exiter) *Cmd {
+func NewCommand(stdout io.Writer, stderr io.Writer, fsys fs.StatFS, config *Config, exiter Exiter, fw FileWriterInterface) *Cmd {
 	return &Cmd{
 		stdout: stdout,
 		stderr: stderr,
 		fsys:   fsys,
 		config: config,
 		exiter: exiter,
+		fw:     fw,
 	}
 }
 
@@ -286,7 +289,7 @@ func (cmd *Cmd) Exec(command Command, args []string) {
 	}
 
 	if command == Report {
-		cmd.Report(tree, cmd.config, stats, args)
+		cmd.Report(tree, stats, args, files, moduleDir)
 		return
 	}
 

@@ -21,6 +21,7 @@ const (
 	depthFlagDesc      = "report on files and directories of certain depth"
 	noColorFlagDesc    = "disable color output"
 	withFullPathDesc   = "include the full path column in the output"
+	htmlOutputFlagDesc = "output the coverage in html format"
 	// inspect flags.
 	exactFlagDesc = "specify exact path to file"
 	// check flags.
@@ -42,6 +43,7 @@ func Exec() { //nolint:funlen
 		withFullPath bool
 		exactPath    bool
 		threshold    float64
+		htmlOutput   bool
 
 		reportCmd  = flag.NewFlagSet("report", flag.ExitOnError)
 		checkCmd   = flag.NewFlagSet("check", flag.ExitOnError)
@@ -54,6 +56,7 @@ func Exec() { //nolint:funlen
 	reportCmd.IntVar(&reportDepth, "d", 0, depthFlagDesc)
 	reportCmd.BoolVar(&noColor, "no-color", false, noColorFlagDesc)
 	reportCmd.BoolVar(&withFullPath, "with-full-path", false, noColorFlagDesc)
+	reportCmd.BoolVar(&htmlOutput, "html", false, htmlOutputFlagDesc)
 
 	checkCmd.Float64Var(&threshold, "threshold", 0, thresholdFlagDesc)
 
@@ -67,13 +70,16 @@ func Exec() { //nolint:funlen
 				`      %s`,
 				`  -d, --depth int`,
 				`      %s`,
+				`  --html`,
+				`      %s`,
 				`  --no-color`,
 				`      %s`,
 				`  --with-full-path`,
 				`      %s`,
 				``,
 			}, "\n"),
-			reportFileFlagDesc, depthFlagDesc, noColorFlagDesc, withFullPathDesc,
+			reportFileFlagDesc, depthFlagDesc, htmlOutputFlagDesc,
+			noColorFlagDesc, withFullPathDesc,
 		)
 	}
 
@@ -122,6 +128,7 @@ func Exec() { //nolint:funlen
 		config.Color = !noColor
 		config.WithFullPath = withFullPath
 		config.ReportFile = reportFile
+		config.HTMLOutput = htmlOutput
 		args = reportCmd.Args()
 	case "test":
 		command = internal.Test
@@ -153,7 +160,7 @@ func Exec() { //nolint:funlen
 	}
 
 	internal.
-		NewCommand(os.Stdout, os.Stderr, os.DirFS(".").(fs.StatFS), config, &internal.ProcessExiter{}). //nolint:forcetypeassert
+		NewCommand(os.Stdout, os.Stderr, os.DirFS(".").(fs.StatFS), config, &internal.ProcessExiter{}, &internal.FileWriter{}). //nolint:forcetypeassert
 		Exec(command, args)
 }
 

@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func (cmd *Cmd) findExactFile(args []string, files map[string]*covFile, moduleDir string) (*covFile, string, error) {
+func findExactFile(args []string, files map[string]*covFile, moduleDir string) (*covFile, string, error) {
 	var (
 		targetFile string
 		relPath    = args[0]
@@ -27,7 +27,7 @@ func (cmd *Cmd) findExactFile(args []string, files map[string]*covFile, moduleDi
 	return file, targetFile, nil
 }
 
-func (cmd *Cmd) findPartialMatchFile(args []string, files map[string]*covFile, moduleDir string) (*covFile, string, int, error) {
+func findPartialMatchFile(args []string, files map[string]*covFile, moduleDir string) (*covFile, string, int, error) {
 	var (
 		targetFile string
 		skipped    int
@@ -60,10 +60,18 @@ func (cmd *Cmd) findPartialMatchFile(args []string, files map[string]*covFile, m
 }
 
 func (cmd *Cmd) Inspect(args []string, files map[string]*covFile, moduleDir string) {
-	if len(args) < 1 {
-		_, _ = fmt.Fprintf(cmd.stderr, "no arguments provided to inspect command\n")
+	result, err := cmd.inspect(args, files, moduleDir)
+	if err != nil {
+		_, _ = fmt.Fprint(cmd.stderr, err.Error())
 		cmd.exiter.Exit(1)
 		return
+	}
+	_, _ = fmt.Fprint(cmd.stdout, result)
+}
+
+func (cmd *Cmd) inspect(args []string, files map[string]*covFile, moduleDir string) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("no arguments provided to inspect command")
 	}
 	var (
 		targetFile string
@@ -72,52 +80,52 @@ func (cmd *Cmd) Inspect(args []string, files map[string]*covFile, moduleDir stri
 		file       *covFile
 		data       []byte
 		skipped    int
+		sb         strings.Builder
 	)
 	if cmd.config.ExactPath {
-		file, targetFile, err = cmd.findExactFile(args, files, moduleDir)
+		file, targetFile, err = findExactFile(args, files, moduleDir)
 	} else {
-		file, targetFile, skipped, err = cmd.findPartialMatchFile(args, files, moduleDir)
+		file, targetFile, skipped, err = findPartialMatchFile(args, files, moduleDir)
 	}
 	if err != nil {
-		_, _ = fmt.Fprint(cmd.stderr, err.Error())
-		cmd.exiter.Exit(1)
-		return
+		return "", err
 	}
 	f, err = cmd.fsys.Open(targetFile)
 	if err != nil {
-		_, _ = fmt.Fprintf(cmd.stderr, "failed to open file to inspect: %s", err.Error())
-		cmd.exiter.Exit(1)
-		return
+		return "", fmt.Errorf("failed to open file to inspect: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 
 	data, err = io.ReadAll(f)
 	if err != nil {
-		_, _ = fmt.Fprintf(cmd.stderr, "failed to read target file to inspect: %s", err.Error())
-		cmd.exiter.Exit(1)
-		return
+		return "", fmt.Errorf("failed to read target file to inspect: %w", err)
 	}
 
-	lines, err := cmd.getColorizedLines(data, file)
+	start, end := Red, NoColor
+	if cmd.config.HTMLOutput {
+		start, end = "<span style=\"background: pink\">", "</span>"
+	}
+
+	lines, err := getColorizedLines(start, end, data, file)
 	if err != nil {
-		_, _ = fmt.Fprint(cmd.stderr, err.Error())
-		cmd.exiter.Exit(1)
-		return
+		return "", err
 	}
 
 	width := digitsCount(len(lines) - 1)
-	if !cmd.config.ExactPath {
-		_, _ = fmt.Fprintf(cmd.stdout, "inspect for file: %s\n", targetFile)
+	if !cmd.config.ExactPath && !cmd.config.HTMLOutput {
+		_, _ = fmt.Fprintf(&sb, "inspect for file: %s\n", targetFile)
 	}
 	for num, line := range lines {
-		_, _ = fmt.Fprintf(cmd.stdout, "%*d| %s\n", width, num+1, line)
+		_, _ = fmt.Fprintf(&sb, "%*d| %s\n", width, num+1, line)
 	}
 	if !cmd.config.ExactPath && skipped > 0 {
-		_, _ = fmt.Fprintf(cmd.stdout, "skipped %d other files which matched\n", skipped)
+		_, _ = fmt.Fprintf(&sb, "skipped %d other files which matched\n", skipped)
 	}
+
+	return sb.String(), nil
 }
 
-func (cmd *Cmd) getColorizedLines(data []byte, file *covFile) ([]string, error) {
+func getColorizedLines(start, end string, data []byte, file *covFile) ([]string, error) {
 	lines := strings.Split(string(data), "\n")
 
 	sort.Slice(file.Reports, func(i, j int) bool {
@@ -142,7 +150,7 @@ func (cmd *Cmd) getColorizedLines(data []byte, file *covFile) ([]string, error) 
 			return nil, errors.New("running inspect failed, please regenerate the coverage report again")
 		}
 
-		lines[lineNum] = lines[lineNum][:report.EndColumn-1] + NoColor + lines[lineNum][report.EndColumn-1:]
+		lines[lineNum] = lines[lineNum][:report.EndColumn-1] + end + lines[lineNum][report.EndColumn-1:]
 
 		lineNum = report.StartLine - 1
 
@@ -154,7 +162,7 @@ func (cmd *Cmd) getColorizedLines(data []byte, file *covFile) ([]string, error) 
 			return nil, errors.New("running inspect failed, please regenerate the coverage report again")
 		}
 
-		lines[lineNum] = lines[lineNum][:report.StartColumn-1] + Red + lines[lineNum][report.StartColumn-1:]
+		lines[lineNum] = lines[lineNum][:report.StartColumn-1] + start + lines[lineNum][report.StartColumn-1:]
 	}
 
 	return lines, nil
