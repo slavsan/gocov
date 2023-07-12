@@ -23,11 +23,16 @@ const tmpl = `<!doctype html>
     .warn .progress > div { background: rgb(242,202,83); }
     .error .progress { border: 1px solid darkred; }
     .error .progress > div { background: darkred; }
+    .indicator { height: 10px; margin: 10px 0; }
+    .indicator.ok { background: rgb(94,145,53) }
+    .indicator.warn { background: rgb(242,202,83) }
+    .indicator.error { background: darkred }
 </style>
 </head>
 <body>
 <div class="breadcrumbs"></div>
 <div class="stats"></div>
+<div class="indicator"></div>
 <table class="table"></table>
 <!-- REPORT -->
 <!-- SOURCE -->

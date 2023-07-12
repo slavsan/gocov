@@ -46,11 +46,16 @@ const expectedHTMLOutput = `<!doctype html>
     .warn .progress > div { background: rgb(242,202,83); }
     .error .progress { border: 1px solid darkred; }
     .error .progress > div { background: darkred; }
+    .indicator { height: 10px; margin: 10px 0; }
+    .indicator.ok { background: rgb(94,145,53) }
+    .indicator.warn { background: rgb(242,202,83) }
+    .indicator.error { background: darkred }
 </style>
 </head>
 <body>
 <div class="breadcrumbs"></div>
 <div class="stats"></div>
+<div class="indicator"></div>
 <table class="table"></table>
 <script class="tree-data" type="application/json">{"name":"example","all":10,"covered":4,"percent":40.00,"path":"example","level":0,"type":"directory","children":[{"name":"cmd","all":1,"covered":0,"percent":0.00,"path":"example/cmd","level":1,"type":"directory","children":[{"name":"exec.go","all":1,"covered":0,"percent":0.00,"path":"example/cmd/exec.go","level":2,"type":"file"}]},{"name":"internal","all":8,"covered":4,"percent":50.00,"path":"example/internal","level":1,"type":"directory","children":[{"name":"exec.go","all":8,"covered":4,"percent":50.00,"path":"example/internal/exec.go","level":2,"type":"file"}]},{"name":"main.go","all":1,"covered":0,"percent":0.00,"path":"example/main.go","level":1,"type":"file"}]}</script>
 <div class="source" id="example/cmd/exec.go"><pre>1| package cmd

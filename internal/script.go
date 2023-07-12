@@ -2,6 +2,7 @@ package internal
 
 const Script = `const node = JSON.parse(document.querySelector('.tree-data').textContent)
 const table = document.querySelector('.table')
+const indicator = document.querySelector('.indicator')
 const _ = null
 
 let currentHash = location.hash.replace('#', '')
@@ -44,6 +45,8 @@ function renderSelected(node, currentHash) {
         const stats = document.querySelector('.stats')
         stats.textContent = node.covered + '/' + node.all + ' (' + node.percent + '%)'
 
+        renderIndicator(node.percent)
+
         if (node.children) {
             node.children.forEach(c => {
                 renderRow(c, currentHash)
@@ -56,6 +59,19 @@ function renderSelected(node, currentHash) {
         node.children.forEach(c => {
             renderSelected(c, currentHash)
         })
+    }
+}
+
+function renderIndicator(percent) {
+    indicator.classList.remove('ok')
+    indicator.classList.remove('warn')
+    indicator.classList.remove('error')
+    if (percent >= 80) {
+        indicator.classList.add('ok')
+    } else if (percent >= 50) {
+        indicator.classList.add('warn')
+    } else {
+        indicator.classList.add('error')
     }
 }
 
@@ -90,6 +106,7 @@ function renderTable(currentHash) {
     if (!currentHash) {
         const stats = document.querySelector('.stats')
         stats.textContent = node.covered + '/' + node.all + ' (' + node.percent + '%)'
+        renderIndicator(node.percent)
         renderNode(node, currentHash)
     } else {
         renderSelected(node, currentHash)
