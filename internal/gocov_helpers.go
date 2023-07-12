@@ -255,6 +255,11 @@ func (cmd *Cmd) Exec(command Command, args []string) {
 
 	err := cmd.loadConfig()
 	if err != nil {
+		if command == ConfigFile {
+			cmd.Config()
+			return
+		}
+
 		_, _ = fmt.Fprint(cmd.stderr, err.Error())
 		cmd.exiter.Exit(1)
 		return

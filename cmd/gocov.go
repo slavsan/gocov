@@ -48,6 +48,7 @@ func Exec() { //nolint:funlen
 		reportCmd  = flag.NewFlagSet("report", flag.ExitOnError)
 		checkCmd   = flag.NewFlagSet("check", flag.ExitOnError)
 		inspectCmd = flag.NewFlagSet("inspect", flag.ExitOnError)
+		configCmd  = flag.NewFlagSet("config", flag.ExitOnError)
 	)
 
 	reportCmd.StringVar(&reportFile, "file", "coverage.out", reportFileFlagDesc)
@@ -134,6 +135,13 @@ func Exec() { //nolint:funlen
 		command = internal.Test
 	case "config":
 		command = internal.ConfigFile
+		err = configCmd.Parse(os.Args[2:])
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "failed to parse args: %s", err.Error())
+			printUsage()
+			os.Exit(1)
+		}
+		args = configCmd.Args()
 	case "check":
 		command = internal.Check
 		err = checkCmd.Parse(os.Args[2:])
@@ -164,14 +172,14 @@ func Exec() { //nolint:funlen
 		Exec(command, args)
 }
 
-const usage = `gocov
+const usage = `gocov - Go coverage reporting tool
 
-test		- run tests with coverage
-report		- print out a coverage report to stdout
-check		- check whether the defined coverage requirements are met
-inspect		- show the covered vs not covered statements in a file
-config		- print a default config or the current config if one is defined
-help		- show this help message
+  test     - run tests with coverage
+  report   - print out a coverage report to stdout
+  check    - check whether the defined coverage requirements are met
+  inspect  - show the covered vs not covered statements in a file
+  config   - print a default config or the current config if one is defined
+  help     - show this help message
 `
 
 func printUsage() {

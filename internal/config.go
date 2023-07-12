@@ -10,7 +10,7 @@ func (cmd *Cmd) Config() {
 		_, _ = fmt.Fprintf(cmd.stdout, "%s\n", cmd.config.File.Contents)
 		return
 	}
-	_, _ = fmt.Fprintf(cmd.stdout, strings.Join([]string{ //nolint:staticcheck // SA1006
+	_, _ = fmt.Fprint(cmd.stdout, strings.Join([]string{
 		`{`,
 		`  "threshold": 50,`,
 		`  "ignore": [`,

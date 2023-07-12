@@ -77,8 +77,12 @@ The command supports several options
 ```
 $ gocov report --help
 Usage of report:
+  -f, --file string
+      coverage profile file (default is coverage.out)
   -d, --depth int
       report on files and directories of certain depth
+  --html
+      output the coverage in html format
   --no-color
       disable color output
   --with-full-path
