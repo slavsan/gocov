@@ -46,7 +46,7 @@ func (cmd *Cmd) ReportHTML(tree *Tree, stats Stats, args []string, files map[str
 }
 
 func escape(value string) string {
-	value = strings.ReplaceAll(value, "&", "amp;")
+	value = strings.ReplaceAll(value, "&", "&amp;")
 	value = strings.ReplaceAll(value, "<", "&lt;")
 	value = strings.ReplaceAll(value, ">", "&gt;")
 	value = strings.ReplaceAll(value, "&lt;/span&gt;", "</span>")
