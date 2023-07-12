@@ -1,17 +1,10 @@
 package internal
 
 import (
-	_ "embed"
 	"fmt"
 	"log"
 	"strings"
 )
-
-//go:embed template.html
-var tmpl string
-
-//go:embed script.js
-var Script string
 
 func (cmd *Cmd) Report(tree *Tree, stats Stats, args []string, files map[string]*covFile, moduleDir string) {
 	if cmd.config.HTMLOutput {
@@ -42,7 +35,7 @@ func (cmd *Cmd) ReportHTML(tree *Tree, stats Stats, args []string, files map[str
 	sb.WriteString(objectBuilder.String())
 	sb.WriteString("</script>")
 
-	tmpl = strings.ReplaceAll(tmpl, "<!-- REPORT -->", sb.String())
+	tmpl := strings.ReplaceAll(tmpl, "<!-- REPORT -->", sb.String())
 	tmpl = strings.ReplaceAll(tmpl, "<!-- SCRIPT -->", Script)
 	tmpl = strings.ReplaceAll(tmpl, "<!-- SOURCE -->", filesSourceBuilder.String())
 

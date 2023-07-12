@@ -1,4 +1,6 @@
-<!doctype html>
+package internal
+
+const tmpl = `<!doctype html>
 <head>
 <title>My coverage</title>
 <style>
@@ -33,3 +35,4 @@
 <!-- SCRIPT -->
 </script>
 </body>
+`

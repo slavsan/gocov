@@ -1,4 +1,6 @@
-const node = JSON.parse(document.querySelector('.tree-data').textContent)
+package internal
+
+const Script = `const node = JSON.parse(document.querySelector('.tree-data').textContent)
 const table = document.querySelector('.table')
 const _ = null
 
@@ -162,3 +164,4 @@ function e(elType, attributes, options, children) {
     }
     return element
 }
+`
