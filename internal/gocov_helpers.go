@@ -69,9 +69,10 @@ func (c *Config) updateThreshold() {
 }
 
 type GocovConfig struct {
-	Ignore    []string `json:"ignore"`
-	Threshold float64  `json:"threshold"`
-	Contents  []byte
+	Ignore               []string `json:"ignore"`
+	Threshold            float64  `json:"threshold"`
+	ReadmeThresholdRegex string   `json:"readme_threshold_regex,omitempty"`
+	Contents             []byte
 }
 
 type covReport struct {

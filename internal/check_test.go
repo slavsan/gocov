@@ -1,3 +1,4 @@
+//nolint:funlen
 package internal_test
 
 import (
@@ -92,6 +93,137 @@ func TestCheckCoverage(t *testing.T) {
 			expectedStdout:   "",
 			expectedStderr:   "invalid go.mod file",
 			expectedExitCode: 1,
+		},
+		{
+			title: "with coverage below threshold defined in README.md",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut)},
+				".gocov": {Data: []byte(strings.Join([]string{
+					`{`,
+					`	"threshold": 70.00,`,
+					`	"readme_threshold_regex": "Code coverage threshold: (.*)$"`,
+					`}`,
+				}, "\n"))},
+				"README.md": {Data: []byte(strings.Join([]string{
+					`# Some title`,
+					``,
+					`Some text`,
+					``,
+					`## Code coverage`,
+					`Code coverage threshold: 80.00`,
+					``,
+				}, "\n"))},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "Coverage check failed in README.md: expected to have 80.00 coverage, but got 73.37\n",
+			expectedExitCode: 1,
+		},
+		{
+			title: "with README.md file missing",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut)},
+				".gocov": {Data: []byte(strings.Join([]string{
+					`{`,
+					`	"threshold": 70.00,`,
+					`	"readme_threshold_regex": "Code coverage threshold: (.*)$"`,
+					`}`,
+				}, "\n"))},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "README.md not found\n",
+			expectedExitCode: 1,
+		},
+		{
+			title: "with invalid README regex",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut)},
+				".gocov": {Data: []byte(strings.Join([]string{
+					`{`,
+					`	"threshold": 70.00,`,
+					`	"readme_threshold_regex": "Code coverage threshold: (.*$"`,
+					`}`,
+				}, "\n"))},
+				"README.md": {Data: []byte(strings.Join([]string{
+					`# Some title`,
+					``,
+					`Some text`,
+					``,
+					`## Code coverage`,
+					`Code coverage threshold: 80.00`,
+					``,
+				}, "\n"))},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "failed to parse README.md regex\n",
+			expectedExitCode: 1,
+		},
+		{
+			title: "with invalid threshold defined in README.md",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut)},
+				".gocov": {Data: []byte(strings.Join([]string{
+					`{`,
+					`	"threshold": 70.00,`,
+					`	"readme_threshold_regex": "Code coverage threshold: (.*)$"`,
+					`}`,
+				}, "\n"))},
+				"README.md": {Data: []byte(strings.Join([]string{
+					`# Some title`,
+					``,
+					`Some text`,
+					``,
+					`## Code coverage`,
+					`Code coverage threshold: foo`,
+					``,
+				}, "\n"))},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "failed to parse threshold in readme, threshold is not a valid float: strconv.ParseFloat: parsing \"foo\": invalid syntax\n",
+			expectedExitCode: 1,
+		},
+		{
+			title: "with coverage above threshold defined in README.md",
+			fsys: fstest.MapFS{
+				"go.mod":       {Data: []byte(`module github.com/slavsan/gospec`)},
+				"coverage.out": {Data: []byte(exampleCoverageOut)},
+				".gocov": {Data: []byte(strings.Join([]string{
+					`{`,
+					`	"threshold": 70.00,`,
+					`	"readme_threshold_regex": "Code coverage threshold: (.*)$"`,
+					`}`,
+				}, "\n"))},
+				"README.md": {Data: []byte(strings.Join([]string{
+					`# Some title`,
+					``,
+					`Some text`,
+					``,
+					`## Code coverage`,
+					`Code coverage threshold: 60.00`,
+					``,
+				}, "\n"))},
+			},
+			config: &internal.Config{
+				Color: false,
+			},
+			expectedStdout:   "",
+			expectedStderr:   "",
+			expectedExitCode: 0,
 		},
 	}
 

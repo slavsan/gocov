@@ -25,8 +25,12 @@ linters:
     - gomnd
     - forcetypeassert
     - wrapcheck
+    - tagliatelle
 linters-settings:
   cyclop:
     max-complexity: 13
   funlen:
     lines: 70
+  stylecheck:
+    checks:
+      - '-ST1005' # Disable "ST1005: error strings should not be capitalized"

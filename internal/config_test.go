@@ -1,3 +1,4 @@
+//nolint:funlen
 package internal_test
 
 import (
