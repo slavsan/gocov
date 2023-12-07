@@ -60,6 +60,8 @@ func Exec() { //nolint:funlen
 	reportCmd.BoolVar(&htmlOutput, "html", false, htmlOutputFlagDesc)
 
 	checkCmd.Float64Var(&threshold, "threshold", 0, thresholdFlagDesc)
+	checkCmd.StringVar(&reportFile, "file", "coverage.out", reportFileFlagDesc)
+	checkCmd.StringVar(&reportFile, "f", "coverage.out", reportFileFlagDesc)
 
 	inspectCmd.BoolVar(&exactPath, "exact", false, noColorFlagDesc)
 
@@ -102,9 +104,12 @@ func Exec() { //nolint:funlen
 				`Usage of check:`,
 				`  --threshold int`,
 				`      %s`,
+				`  -f, --file string`,
+				`      %s`,
 				``,
 			}, "\n"),
 			thresholdFlagDesc,
+			reportFileFlagDesc,
 		)
 	}
 
@@ -150,6 +155,7 @@ func Exec() { //nolint:funlen
 			printUsage()
 			os.Exit(1)
 		}
+		config.ReportFile = reportFile
 		config.Threshold = threshold
 		args = checkCmd.Args()
 	case "inspect":
