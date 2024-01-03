@@ -310,6 +310,9 @@ func padPath(maxFileLen int, path string, indent int) string {
 }
 
 func getPercent(n *Node) float64 {
+	if n.allStatements <= 0 {
+		return 0
+	}
 	return float64(n.covered) * 100 / float64(n.allStatements)
 }
 
